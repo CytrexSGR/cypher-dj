@@ -1,5 +1,5 @@
 // The + INSERT entries of a strip (pure) and the DOM part: the chip and its menu.
-import { ARTEN, HOST_ART, MAX_ART, MAX_PLAETZE, anzahl, frei, straenge, neuerInsertBefehl, insertLabels } from '../production/inserts.js';
+import { ARTEN, HOST_ART, MAX_ART, MAX_PLAETZE, GLUE_VORLAGEN, anzahl, frei, straenge, neuerInsertBefehl, insertLabels } from '../production/inserts.js';
 import { MAX_HOST } from '../production/limits.js';
 import { pluginGrund } from '../production/devices_browser.js';
 import { duckKicks, duckBefehl } from '../production/key_choice.js';
@@ -9,8 +9,8 @@ const PLUS_ARTEN = [['komp', 'Compressor'], ['eq', 'EQ'], ['saett', 'Saturator']
 const PLUS_MISCH = [['gate', 'Gate'], ['mb', 'Multiband'], ['trans', 'Transient shaper'], ['bild', 'Imager']];   // after the Utility when the list has one
 export const PLUS_VOLL_TEXT = `The strip holds ${MAX_PLAETZE} stages`;
 export const MASTER_VOLL_TEXT = 'The master chain has five stages';   // MAX_PLAETZE = 5
-/** The values of a fresh Cypher Clipper: the Hard clip curve, no drive, no output gain, ceiling -0.3 dB, fully wet. */
-export const KLIPPER_WERTE = { kurve: 2, drive: 0, out: 0, decke: -0.3, mix: 1 };
+/** The values of a fresh Cypher Clipper: the Hard clip curve, no drive, no output gain, ceiling -0.3 dB, knee 3 dB, fully wet (old stages keep knee 0). */
+export const KLIPPER_WERTE = { kurve: 2, drive: 0, out: 0, decke: -0.3, knie: 3, mix: 1 };
 /** The insert_setzen of a Clipper (a saturator stage with the Hard clip curve) at `pos` (default: the end of the chain), or null (pool or chain full). */
 export function klipperBefehl(p, strangId, pos) {
   const b = neuerInsertBefehl(p, strangId, 'saett');
@@ -26,6 +26,23 @@ export function masterClipZustand(p) {
   const l = kette.findIndex((i) => i.art === 'lim');
   const befehl = klipperBefehl(p, 'master', l < 0 ? kette.length : l);
   return { insert: null, befehl, grund: befehl ? '' : ARTEN.saett.voll };
+}
+export { GLUE_VORLAGEN };   // the recipes live in inserts.js (the face needs them too); plus.js is their menu side
+/** The insert_setzen of a Cypher Glue stage (a compressor stage in glue mode with the recipe `vorlage`: bus, drums, master or smash) at `pos` (default: the end of the chain), or null (pool or chain full). */
+export function glueBefehl(p, strangId, pos, vorlage = 'bus') {
+  const b = neuerInsertBefehl(p, strangId, 'komp'), v = GLUE_VORLAGEN[vorlage];
+  return b && v ? { ...b, ...(pos !== undefined ? { pos } : {}), werte: { ...v.werte, glue: 1 } } : null;
+}
+/** The GLUE button of the master strip: {insert: the glue compressor on the master (glue 1) or null, befehl: the insert that adds one (Master recipe) before the first clipper
+ *  (a saturator with a curve above Tanh) or limiter, else at the end, grund: why it cannot be added}. */
+export function masterGlueZustand(p) {
+  const kette = p?.master?.inserts ?? [];
+  const insert = kette.find((i) => i.art === 'komp' && Number(i.werte?.glue) >= 0.5) ?? null;
+  if (insert) return { insert, befehl: null, grund: '' };
+  if (kette.length >= MAX_PLAETZE) return { insert: null, befehl: null, grund: MASTER_VOLL_TEXT };
+  const l = kette.findIndex((i) => (i.art === 'saett' && Number(i.werte?.kurve) > 0) || i.art === 'lim');
+  const befehl = glueBefehl(p, 'master', l < 0 ? kette.length : l, 'master');
+  return { insert: null, befehl, grund: befehl ? '' : ARTEN.komp.voll };
 }
 /** The values of a fresh De-esser (strand 5 slice 2): an EQ stage with band 6 only, a High shelf at 6 kHz that cuts 8 dB above -30 dB (1 ms attack, 60 ms release). */
 export const DEESSER_WERTE = { 'b6/an': 1, 'b6/typ': 2, 'b6/freq': 6000, 'b6/gain': 0, 'b6/q': 0.707, 'd6/dyn': 1, 'd6/schwelle': -30, 'd6/bereich': -8, dyn_attack: 1, dyn_release: 60 };
@@ -56,13 +73,18 @@ export function plusEintraege(p, strangId, graphen, opt = {}) {
     const b = voll ? null : klipperBefehl(p, strangId);
     return b ? { text: t, befehl: b, label: `Add Clipper to ${strang.name}` } : { text: t, befehl: null, grund: voll ? PLUS_VOLL_TEXT : ARTEN.saett.voll };
   };
+  const glue = () => {   // strand 13 slice 1: a compressor stage in glue mode, the Bus recipe
+    const t = mitZahl('Glue', 'komp');
+    const b = voll ? null : glueBefehl(p, strangId);
+    return b ? { text: t, befehl: b, label: `Add Glue to ${strang.name}` } : { text: t, befehl: null, grund: voll ? PLUS_VOLL_TEXT : ARTEN.komp.voll };
+  };
   const deesser = () => {   // strand 5 slice 2: an EQ stage that starts as a dynamic high shelf
     const t = mitZahl('De-esser', 'eq');
     const b = voll ? null : deesserBefehl(p, strangId);
     return b ? { text: t, befehl: b, label: `Add De-esser to ${strang.name}` } : { text: t, befehl: null, grund: voll ? PLUS_VOLL_TEXT : ARTEN.eq.voll };
   };
   const aus = [
-    ...arten.flatMap(([art, text]) => (art === 'saett' ? [eintrag(text, art), klipper()] : art === 'eq' ? [eintrag(text, art), deesser()] : [eintrag(text, art)])),
+    ...arten.flatMap(([art, text]) => (art === 'komp' ? [eintrag(text, art), glue()] : art === 'saett' ? [eintrag(text, art), klipper()] : art === 'eq' ? [eintrag(text, art), deesser()] : [eintrag(text, art)])),
     ...(graphen ?? []).filter((g) => g?.art === 'effekt' && typeof g.name === 'string').map((g) => eintrag(g.name, 'bk', g.name)),
   ];
   const effekte = (opt.plugins ?? []).filter((e) => e?.art === 'effekt');

@@ -102,7 +102,7 @@ test('POST /regler on the real server: spur/<slot>/bk/<k> is 409 ueber_projekt a
 });
 
 test('ins/saett/<n>/kurve and decke are controller paths for slots 1..32 (strand 5 slice 3); unknown rows and slot 33 are not', () => {
-  for (const p of ['ins/saett/1/kurve', 'ins/saett/4/decke', 'ins/saett/2/drive', 'ins/saett/5/kurve', 'ins/saett/32/decke']) assert.equal(PFAD.test(p), true, p);
+  for (const p of ['ins/saett/1/kurve', 'ins/saett/4/decke', 'ins/saett/2/drive', 'ins/saett/5/kurve', 'ins/saett/32/decke', 'ins/saett/1/knie', 'ins/saett/32/knie']) assert.equal(PFAD.test(p), true, p);
   for (const p of ['ins/saett/1/foo', 'ins/saett/33/kurve', 'ins/saett/0/decke', 'ins/saett/05/an']) assert.equal(PFAD.test(p), false, p);
 });
 

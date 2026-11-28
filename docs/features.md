@@ -190,7 +190,7 @@ of the beta. The short version is the [README](../README.md).
   loop range, and the louder one is turned down by the difference, so the comparison is at the same loudness. It is
   matched for that range, bypasses all master stages together, and is refused with a plugin stage or a fader lane on
   the master
-- **Sidechain**: a compressor stage or an EQ stage with dynamic bands can be keyed (KEY button on the stage, or the agent's tools) by another track, a group, a
+- **Sidechain**: a compressor stage, a multiband stage or an EQ stage with dynamic bands can be keyed (KEY button on the stage, or the agent's tools) by another track, a group, a
   return or a DJ deck; keys that would form a cycle or arrive too late are refused with a reason. One command sets up
   Duck by Kick
 - **Sends and returns**: eight returns, each with one send per track or group and an optional Cypher Hall
@@ -293,7 +293,13 @@ references before they went in:
   with the algorithmic reverb; eight factory presets. The four rooms are synthetic impulse responses, not recordings of real spaces.
   It was measured on probe signals and has not been judged by a listener yet
 - **Cypher Comp**: a feed-forward compressor after Giannoulis, Massberg and Reiss (2012) with soft knee,
-  parallel mix, external sidechain and a high-pass in the detector; six presets
+  parallel mix, external sidechain and a high-pass in the detector; six presets. Its Glue mode turns it into a bus compressor:
+  stepped ratio, attack and release, an auto release that follows the program, and four starting points (Bus, Drums, Master, Smash)
+- **Cypher Multiband**: a three-band compressor as an insert stage on any strip (up to eight in a project), with its own face: the
+  two crossovers are dragged along a frequency strip, each band has a threshold, ratio, attack, release, knee, makeup and bypass,
+  and a bar shows the gain reduction of every band. Each band can also lift quiet material (upward compression: threshold, ratio
+  1 to 4, a range up to 24 dB; nothing below about -90 dBFS is raised) and a second bar shows the lift. The stage can listen to a
+  key (KEY button): all three bands then detect on the key, so the low band can duck under a kick while the mids stay
 - **Cypher Transient**: a transient shaper as an insert stage on any strip: one gain for the onset of a sound and one for the
   tail after it (each from -24 to +24 dB), a detector time of 1 to 100 ms, output level and dry/wet mix; no latency
 - **Cypher Imager**: a three-band stereo imager as an insert stage: the width of the low, mid and high band is set apart
@@ -305,7 +311,7 @@ references before they went in:
   oversampling. Available as a plugin and as an insert stage in the production core.
   In the production core the stage also has soft and hard clip curves with a ceiling (-24 to 0 dBFS), so it works
   as the Cypher Clipper: the Clipper entry in the insert menu, and a CLIP button on the master strip that puts a
-  clipper in front of the master limiter. The stage reports how far it goes over its ceiling
+  clipper in front of the master limiter. The clip curves run at 8x oversampling, and the hard clip has a Knee knob (0 to 12 dB) that rounds its corner. The stage reports how far it goes over its ceiling
 - **Cypher Drive** (`fx-drive`): an insert device with six curves (tape, tube, soft clip, hard clip, wavefolder,
   bit crush), drive, character, tone, output and mix, and a three-band mode with its own drive per band; six
   factory presets

@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { itemText, verwandtZeilen } from '../public/browser/verwandt.js';
+import { handQuelle } from '../../hand/tests/support/hand_source.mjs';
 
 const SHA = '1639f39a0000000000000000000000000000000000000000000000000000abcd';
 
@@ -28,7 +29,7 @@ test('the STUDIO undo and redo tooltips show the label through labelText', () =>
 });
 
 test('the hand text names the undo step "Cypher Modular: save sound"', () => {
-  const hand = fs.readFileSync(new URL('../../hand/hand.ts', import.meta.url), 'utf8');
+  const hand = handQuelle();
   assert.ok(hand.includes('one undo step "Cypher Modular: save sound"'));
   assert.ok(!hand.includes('"Baukasten: save sound"'));
 });

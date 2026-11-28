@@ -143,7 +143,8 @@ function insertReglerAenderungen(alt: Projekt, neu: Projekt, aus: ReglerAenderun
   for (const art of INS_POOL) {
     const zustand = (p: Projekt): Map<number, Record<string, number>> => new Map(alleInserts(p).filter((x) => x.insert.art === art)
       .map((x) => [x.insert.slot, {
-        ...x.insert.werte, an: x.insert.an ? 1 : 0, ...(art === 'komp' || art === 'eq' ? { sc: x.insert.sc ?? 0 } : {}),
+        // strand 13 slice 4: the mb key row too
+        ...x.insert.werte, an: x.insert.an ? 1 : 0, ...(art === 'komp' || art === 'eq' || art === 'mb' ? { sc: x.insert.sc ?? 0 } : {}),
       }] as const));
     const a = zustand(alt), n = zustand(neu);
     for (const slot of [...new Set([...a.keys(), ...n.keys()])].sort((x, y) => x - y)) {

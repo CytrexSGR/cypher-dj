@@ -66,6 +66,16 @@ pub unsafe extern "C" fn cypher_komp_setze(h: *mut CypherKomp, e: CypherKompEins
     }
 }
 
+/// Glue character (stepped ratio/attack/release) and auto release; values above 1 count as 1.
+/// # Safety
+/// `h` gültig, nicht nebenläufig mit `cypher_komp_block`.
+#[no_mangle]
+pub unsafe extern "C" fn cypher_komp_setze_charakter(h: *mut CypherKomp, glue: u8, auto_rel: u8) {
+    if let Some(h) = h.as_mut() {
+        let _ = catch_unwind(AssertUnwindSafe(|| h.k.setze_charakter(glue != 0, auto_rel != 0)));
+    }
+}
+
 /// # Safety
 /// `h` gültig.
 #[no_mangle]

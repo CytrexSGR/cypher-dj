@@ -12,7 +12,11 @@ proj_analysis_flow.test.mjs     # a failing render answers render_fehler and fre
 proj_stems.test.mjs              # S6 D10: the run state is read while the stem process works
 ins_level_stream.test.mjs         # inside 100 ms one stage is condensed to the last message
 ins_gr_stream.test.mjs            # same window for the gain reduction stream
-server.test.mjs                  # S5r /regler: the knob reaches the kernel, lage shows it
+server_routes_inventory.test.mjs      # S5r /regler: the knob reaches the kernel, lage shows it (the former server.test.mjs, split into five files)
+server_deck_operation.test.mjs
+server_sound_fx.test.mjs
+server_track_run.test.mjs
+server_track_restart.test.mjs
 stack.test.mjs                  # Befund 2: the page server fails at start, the leitstand child exits
 proj_s3_a17b_transport_window.test.mjs  # Stop Cypher must come after the acknowledgement (292 ms under load)
 safety_net.test.mjs              # S0 /spur: Stop Cypher state of the mock core

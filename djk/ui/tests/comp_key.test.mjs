@@ -94,3 +94,46 @@ test('the chip menu offers Key source for an eq stage (production view only) and
   assert.equal(eqDynHinweisSichtbar(3, hatSchluessel({ key: { quelle: 'ret', nr: 1, punkt: 'post' } })), false);
   assert.equal(eqDynHinweisSichtbar(1, false), false, 'modes 1 and 2 never show the note');
 });
+
+// strand 13 slice 4 (task 4.3): the multiband stage takes the key like the compressor and the EQ
+const mbProjekt = () => {
+  let p = neuesProjekt('T');
+  for (let i = 0; i < 2; i++) p = fuehreAus(p, { befehl: 'spur_neu', art: 'audio', name: `T${i + 1}` }).projekt;
+  return fuehreAus(p, { befehl: 'insert_setzen', strang_id: 's2', pos: 0, art: 'mb' }).projekt;
+};
+const mbStufe = (p) => p.spuren[1].inserts[0];
+
+test('an mb stage takes the key through the menu command (ONE proj_aendern command), as row sc or as a structural key; the row is ins/mb/<slot>/sc', () => {
+  const p = mbProjekt();
+  const id = mbStufe(p).id;
+  assert.equal(insertZeilen(mbStufe(p))['ins/mb/1/sc'], 0, 'no key: row 0');
+  const e = fuehreAus(p, schluesselBefehl(id, 'spur:1:pre'));
+  assert.equal(mbStufe(e.projekt).sc, 1);
+  assert.deepEqual(e.regler_aenderungen.filter((r) => r.pfad.endsWith('/sc')), [{ pfad: 'ins/mb/1/sc', wert: 1 }]);
+  assert.equal(insertZeilen(mbStufe(e.projekt))['ins/mb/1/sc'], 1);
+  pruefeProjekt(JSON.parse(JSON.stringify(kanonisch(e.projekt))));
+  const k = fuehreAus(e.projekt, schluesselBefehl(id, 'spur:1:post'));
+  assert.deepEqual(mbStufe(k.projekt).key, { quelle: 'spur', nr: 1, punkt: 'post' });
+  assert.equal(mbStufe(k.projekt).sc, undefined);
+  pruefeProjekt(JSON.parse(JSON.stringify(kanonisch(k.projekt))));
+  const o = fuehreAus(k.projekt, schluesselBefehl(id, 'own'));
+  assert.equal(mbStufe(o.projekt).key, undefined); assert.equal(mbStufe(o.projekt).sc, undefined);
+  const neu = fuehreAus(p, { befehl: 'insert_setzen', strang_id: 's2', pos: 1, art: 'mb', key: { quelle: 'spur', nr: 1, punkt: 'post' } }).projekt;
+  assert.deepEqual(neu.spuren[1].inserts[1].key, { quelle: 'spur', nr: 1, punkt: 'post' });
+  assert.throws(() => fuehreAus(p, schluesselBefehl(id, 'spur:2:post')), (x) => x instanceof BefehlFehler && /sidechain_/.test(x.grund), 'its own track is no key');
+});
+
+test('the upward rows of an mb stage are values of the stage (insert_param_setzen u2/ratio, one command) and leave the key alone', () => {
+  const p = mbProjekt();
+  const id = mbStufe(p).id;
+  const e = fuehreAus(p, { befehl: 'insert_param_setzen', insert_id: id, param: 'u2/ratio', wert: 2.5 });
+  assert.equal(mbStufe(e.projekt).werte['u2/ratio'], 2.5);
+  assert.deepEqual(e.regler_aenderungen, [{ pfad: 'ins/mb/1/u2/ratio', wert: 2.5 }]);
+  assert.throws(() => fuehreAus(p, { befehl: 'insert_param_setzen', insert_id: id, param: 'u2/ratio', wert: 5 }), BefehlFehler, 'ratio 1..4');
+});
+
+test('the chip menu offers Key source for an mb stage, and the stage face has its KEY button', () => {
+  const s = { inserts: [{ id: 'i1', art: 'mb' }] };
+  assert.ok(chipMenuePunkte(s, s.inserts[0], { schluessel: true }).some((x) => x.aktion === 'schluessel'));
+  assert.ok(!chipMenuePunkte(s, s.inserts[0], { schluessel: false }).some((x) => x.aktion === 'schluessel'));
+});

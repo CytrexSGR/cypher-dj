@@ -3,7 +3,11 @@
 # mapping test to file was done by title); a rough value is enough, the shards only have to be about equally long. Refresh from a run when the picture changes.
 
 343.8 controls_alias_route.test.mjs
-264.8 server.test.mjs
+147.8 server_track_run.test.mjs
+108.3 server_routes_inventory.test.mjs
+100.2 server_track_restart.test.mjs
+94.2 server_deck_operation.test.mjs
+77.0 server_sound_fx.test.mjs
 193.5 seq_deck_free.test.mjs
 153.9 graph_container.test.mjs
 153.8 slots_route.test.mjs

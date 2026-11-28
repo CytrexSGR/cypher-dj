@@ -8,11 +8,13 @@
 
 #include "arr_build.h"
 #include "arr_run.h"
+#include "cypherdj/signalbox/insert_zahlen.h"
 #include "cypherdj/signalbox/controls.h"
 #include "alloc_intercept.h"   // last: replaces malloc and relatives
 
 bool g_waechter = false;
 
+namespace iz = cypherdj::insert_zahlen;
 namespace cdj {
 struct ArrPruefZugang {   // friend of Arrangement: did the track write the lane buffer of a field in the last block?
   static bool schrieb(const Arrangement& a, int spur, int feld) { return a.auto_war_[spur][feld]; }
@@ -159,12 +161,9 @@ int main() {
   PRUEF(stapel_da && stapel_tief == 32);   // U9: the stacks were really loaded and play on all 32 tracks
   PRUEF(positiv >= 1);
   PRUEF(im_zyklus == 0);
-  // strand 5 slice 3: saett 4 -> 32 (the 4 rows an..mix of 28 more slots here, kurve and decke in the SAETT term), trans 32 x 6 and bild 16 x 7 behind mb;
-  // strand 1 slice 4: + 338 rows (gate 16 x 8, multiband 8 x 24, limiters 2 -> 8 in the contract; the core stages follow in 4.2); strand 1 slices 1, 3
-  // and 3b: 5184 at komp 12 and eq 8, the pools add 10 rows per compressor and 59 per EQ (15632 at 160 + 160); loop lane strip K1: +96 rows
-  // (spur/<n>/fx/1..3 of 32 tracks) on top of the 5088 before; 16 bk slots (4576 with 8); container core K9: the console of four containers and four
-  // buses replaced the deck, erz and loop-box strips; 5076 rows before it, 500 fewer now (measured, the old sum stays in the git history)
-  PRUEF(tab->anzahl() == 5184 + (cdj::ARR_INS_KOMP - 12) * 10 + (cdj::ARR_INS_EQ - 8) * 59 + cdj::ARR_INS_EQ * (cdj::INS_EQ_PARAM - 59) + cdj::ARR_INS_SAETT * (cdj::INS_SAETT_PARAM - 4) + (cdj::ARR_INS_SAETT - 4) * 4 + cdj::ARR_INS_TRANS * cdj::INS_TRANS_PARAM + cdj::ARR_INS_BILD * cdj::INS_BILD_PARAM + 16 * 8 + 8 * 24 + 6 * 3 + (cdj::ARR_INS_HOST - 4) +
+// Table size = the 3958 rows outside the insert block (a pin: it moves only when a row outside the inserts is added) + the insert block
+// from docs/interfaces/insert_module.json (iz::ZEILEN_GESAMT, generated: no row count of an insert stage is typed here) + the trailing track and plug rows.
+  PRUEF(tab->anzahl() == 3958 + iz::ZEILEN_GESAMT +
         (cypherdj::stellwerk::SPUR_REGLER_SPUREN - cypherdj::stellwerk::SPUR_REGLER_SPUREN_ALT) * 24 +
         cypherdj::stellwerk::REGLER_PLUG_HOSTS * cypherdj::stellwerk::REGLER_PLUG_KNOEPFE);
   PRUEF(voll == 0);

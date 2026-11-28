@@ -28,37 +28,37 @@ const ERLAUBT = [
   { datei: 'ui/check/acceptance_r8.mjs', fragment: 'i <= 32', grund: 'probe: one command per track' },
   { datei: 'ui/check/acceptance_e3.mjs', fragment: '<1..32,', grund: 'probe usage text: number of tracks' },
   // 32 sampler slots (a bank holds 1..32 slots, INS / platz address one); the slot count is not the knob count
-  { datei: 'ui/project/model.ts', fragment: 'platz (1..32,', grund: 'comment: sampler slot number' },
+  { datei: 'ui/project/model_types.ts', fragment: 'platz (1..32,', grund: 'comment: sampler slot number' },
   { datei: 'ui/project/tracker_text.ts', fragment: '01..32', grund: 'sampler slot digits of the INS column' },
   { datei: 'ui/project/tracker_text.ts', fragment: 'Number(i) <= 32', grund: 'INS column: slot number bound' },
   { datei: 'ui/public/tracker/eingabe.js', fragment: 'platz <= 32', grund: 'slot number bound' },
   { datei: 'ui/public/tracker/eingabe.js', fragment: 'Slot 1..32 expected', grund: 'slot number message' },
   { datei: 'ui/sampler/slots.ts', fragment: '1..32 entries', grund: 'a bank holds 1..32 slots' },
-  { datei: 'hand/hand.ts', fragment: '01..32', grund: 'tool text: INS column slot digits' },
-  { datei: 'hand/hand.ts', fragment: 'platz? 1..32', grund: 'tool text: sampler slot number' },
-  { datei: 'hand/hand.ts', fragment: 'platz (1..32,', grund: 'tool text: sampler slot number' },
+  { datei: 'hand/hand_live.ts', fragment: '01..32', grund: 'tool text: INS column slot digits' },
+  { datei: 'hand/hand_proj.ts', fragment: 'platz? 1..32', grund: 'tool text: sampler slot number' },
+  { datei: 'hand/hand_proj.ts', fragment: 'platz (1..32,', grund: 'tool text: sampler slot number' },
   // name lengths: graph, kit and group names are 1..32 characters
   { datei: '', fragment: '1..32 characters', grund: 'name length of a graph, kit or group' },
   { datei: '', fragment: '_ -, 1..32)', grund: 'graph name length' },
   { datei: '', fragment: '[a-z0-9_-] 1..32', grund: 'kit name length (tool text)' },
-  { datei: 'hand/hand.ts', fragment: '_ and -, 1..32)', grund: 'kit name length (tool text of proj_kits)' },
+  { datei: 'hand/hand_proj.ts', fragment: '_ and -, 1..32)', grund: 'kit name length (tool text of proj_kits)' },
   { datei: '', fragment: 'text 1..32', grund: 'group name length (tool text)' },
   // arc fade lengths are bar counts (strand 11 slice 7: rein/raus 1..32 bars), not knobs
-  { datei: 'hand/hand.ts', fragment: 'over n bars (1..32)', grund: 'tool text of bogen: fade-in length in bars' },
+  { datei: 'hand/hand_live.ts', fragment: 'over n bars (1..32)', grund: 'tool text of bogen: fade-in length in bars' },
   // knob 32 as one row of a table that goes on to knob 64 (the tables are pinned to 64 by their own tests)
   { datei: 'ui/public/production/lanes.js', fragment: "'geraet.k32'", grund: 'row of the knob table k1..k64' },
   { datei: 'ui/public/production/envelopes.js', fragment: "'geraet.k32'", grund: 'row of the knob table k1..k64' },
-  { datei: 'ui/project/model.ts', fragment: "'geraet.k32'", grund: 'row of the knob table k1..k64' },
+  { datei: 'ui/project/model_types.ts', fragment: "'geraet.k32'", grund: 'row of the knob table k1..k64' },
   { datei: 'ui/project/insert_key.ts', fragment: "name: 'k32'", grund: 'generated key list k1..k64' },
   { datei: 'conductor/src/insert_controls.ts', fragment: "/k32'", grund: 'generated rows ins/bk/<n>/k1..k64' },
   // insert pools of 32 instances (strand 5: saturators 4 -> 32, transient shapers 32), not knobs
   { datei: 'ui/hand_operation.ts', fragment: 'ins\\/saett\\/([1-9]|[12][0-9]|3[0-2])', grund: 'saturator pool ins/saett/1..32' },
   { datei: 'ui/hand_operation.ts', fragment: 'ins\\/trans\\/([1-9]|[12][0-9]|3[0-2])', grund: 'transient shaper pool ins/trans/1..32' },
-  { datei: 'hand/hand.ts', fragment: 'ins/saett/1..32', grund: 'tool text: saturator pool of 32' },
-  { datei: 'hand/hand.ts', fragment: 'ins/trans/1..32', grund: 'tool text: transient shaper pool of 32' },
+  { datei: 'hand/hand_live.ts', fragment: 'ins/saett/1..32', grund: 'tool text: saturator pool of 32' },
+  { datei: 'hand/hand_live.ts', fragment: 'ins/trans/1..32', grund: 'tool text: transient shaper pool of 32' },
   // comments that describe the 8 -> 32 -> 64 history
-  { datei: 'ui/project/model.ts', fragment: 'bk k9..k32', grund: 'comment: the index space of the rack members, k33..k64 follow' },
-  { datei: 'ui/project/model.ts', fragment: 'k9..k32 = 17..40', grund: 'comment: GLIED_PARAM_BK9 range, GLIED_PARAM_BK33 follows' },
+  { datei: 'ui/project/model_types.ts', fragment: 'bk k9..k32', grund: 'comment: the index space of the rack members, k33..k64 follow' },
+  { datei: 'ui/project/model_types.ts', fragment: 'k9..k32 = 17..40', grund: 'comment: GLIED_PARAM_BK9 range, GLIED_PARAM_BK33 follows' },
   { datei: 'ui/project/playback.ts', fragment: 'bk k9..k32', grund: 'comment: the index space of the playback, k33..k64 follow' },
 ];
 

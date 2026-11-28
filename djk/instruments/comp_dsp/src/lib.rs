@@ -37,9 +37,41 @@ impl Default for Einstellung {
     }
 }
 
+/// Glue steps (D3): ratio, attack in ms, release in ms
+const GLUE_RATIO: [f64; 4] = [1.5, 2.0, 4.0, 10.0];
+const GLUE_ATTACK_MS: [f64; 6] = [0.1, 0.3, 1.0, 3.0, 10.0, 30.0];
+const GLUE_RELEASE_MS: [f64; 5] = [100.0, 200.0, 400.0, 800.0, 1200.0];
+/// Auto release (D4): fast branch time constant and slow branch time constant in seconds
+const AUTO_SCHNELL_S: f64 = 0.1;
+const AUTO_LANGSAM_S: f64 = 1.2;
+
+/// Nearest step in the log domain; a tie goes to the lower step.
+fn naechste_stufe(v: f64, stufen: &[f64]) -> f64 {
+    let lv = v.max(1e-9).ln();
+    let mut best = stufen[0];
+    let mut best_d = (lv - best.ln()).abs();
+    for &s in &stufen[1..] {
+        let d = (lv - s.ln()).abs();
+        if d < best_d - 1e-12 {
+            best = s;
+            best_d = d;
+        }
+    }
+    best
+}
+
 pub struct Komp {
     fs: f64,
+    /// effective settings (stepped when glue is on)
     e: Einstellung,
+    /// settings as last given to `setze`
+    roh: Einstellung,
+    glue: bool,
+    auto_rel: bool,
+    y_f: f64,
+    y_s: f64,
+    a_s: f64,
+    a_rel_fast: f64,
     a_att: f64,
     a_rel: f64,
     y1: f64,
@@ -56,17 +88,40 @@ const PEGEL_MIN: f64 = 1e-6;
 
 impl Komp {
     pub fn neu(fs: f64) -> Self {
-        let mut k = Komp { fs, e: Einstellung::default(), a_att: 0.0, a_rel: 0.0, y1: 0.0, yl: 0.0, hp_g: 0.0, hp_a: 1.0, hp_an: false, hp_z: [[0.0; 2]; 2] };
+        let mut k = Komp { fs, e: Einstellung::default(), roh: Einstellung::default(), glue: false, auto_rel: false, y_f: 0.0, y_s: 0.0, a_s: (-1.0 / (AUTO_LANGSAM_S * fs)).exp(), a_rel_fast: (-1.0 / (AUTO_SCHNELL_S * fs)).exp(), a_att: 0.0, a_rel: 0.0, y1: 0.0, yl: 0.0, hp_g: 0.0, hp_a: 1.0, hp_an: false, hp_z: [[0.0; 2]; 2] };
         k.setze(&Einstellung::default());
         k
     }
 
     /// Echtzeitfest. Zeitkonstanten: α = exp(−1/(τ·fs)) (Gl. 7), Ratio mindestens 1.
     pub fn setze(&mut self, e: &Einstellung) {
-        let mut e = *e;
+        self.roh = *e;
+        self.uebernehmen();
+    }
+
+    /// Glue character (stepped ratio, attack, release, D3) and auto release (D4). Real-time safe; the stepping runs here,
+    /// not per sample. Takes effect with the settings last given to `setze`.
+    pub fn setze_charakter(&mut self, glue: bool, auto_release: bool) {
+        self.glue = glue;
+        self.auto_rel = auto_release;
+        self.uebernehmen();
+    }
+
+    /// Effective ratio, attack (ms) and release (ms); release is 0.0 while auto release is on.
+    pub fn wirksam(&self) -> (f64, f64, f64) {
+        (self.e.ratio, self.e.attack_ms, if self.auto_rel { 0.0 } else { self.e.release_ms })
+    }
+
+    fn uebernehmen(&mut self) {
+        let mut e = self.roh;
         e.ratio = e.ratio.max(1.0);
         e.knie_db = e.knie_db.max(0.0);
         e.mix = e.mix.clamp(0.0, 1.0);
+        if self.glue {
+            e.ratio = naechste_stufe(e.ratio, &GLUE_RATIO);
+            e.attack_ms = naechste_stufe(e.attack_ms, &GLUE_ATTACK_MS);
+            e.release_ms = naechste_stufe(e.release_ms, &GLUE_RELEASE_MS);
+        }
         self.e = e;
         self.a_att = (-1.0 / (e.attack_ms.max(0.01) * 1e-3 * self.fs)).exp();
         self.a_rel = (-1.0 / (e.release_ms.max(0.1) * 1e-3 * self.fs)).exp();
@@ -90,6 +145,8 @@ impl Komp {
 
     pub fn leeren(&mut self) {
         self.y1 = 0.0;
+        self.y_f = 0.0;
+        self.y_s = 0.0;
         self.yl = 0.0;
         self.hp_z = [[0.0; 2]; 2];
     }
@@ -118,7 +175,14 @@ impl Komp {
             let x_g = 20.0 * pegel.max(PEGEL_MIN).log10();
             let x_l = x_g - gain_computer(x_g, e.schwelle_db, e.ratio, e.knie_db);
             // Gl. 17: Release-Zweig hält die Spitze, der Attack-Zweig glättet ihn
-            self.y1 = x_l.max(self.a_rel * self.y1 + (1.0 - self.a_rel) * x_l);
+            if self.auto_rel {
+                // D4: fast peak-hold branch (100 ms) and slow one-pole (1.2 s); the larger one wins
+                self.y_f = x_l.max(self.a_rel_fast * self.y_f + (1.0 - self.a_rel_fast) * x_l);
+                self.y_s = self.a_s * self.y_s + (1.0 - self.a_s) * x_l;
+                self.y1 = self.y_f.max(self.y_s);
+            } else {
+                self.y1 = x_l.max(self.a_rel * self.y1 + (1.0 - self.a_rel) * x_l);
+            }
             self.yl = self.a_att * self.yl + (1.0 - self.a_att) * self.y1;
             let g = 10f64.powf((e.makeup_db - self.yl) / 20.0);
             let w = e.mix * g + (1.0 - e.mix);

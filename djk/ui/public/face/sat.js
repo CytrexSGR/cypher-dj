@@ -20,15 +20,23 @@ export function saettEinstellung(werte = {}) {
 
 export const SAETT_KURVEN = ['Tanh', 'Soft clip', 'Hard clip'];
 /** The shape f of a curve (0 tanh, 1 soft clip 1.5u - 0.5u^3 inside |u| <= 1, 2 hard clip), unit ceiling. */
-const form = (kurve, u) => (kurve === 1 ? (Math.abs(u) <= 1 ? 1.5 * u - 0.5 * u * u * u : Math.sign(u)) : kurve === 2 ? Math.min(1, Math.max(-1, u)) : Math.tanh(u));
+const form = (kurve, u, knie = 0) => (kurve === 1 ? (Math.abs(u) <= 1 ? 1.5 * u - 0.5 * u * u * u : Math.sign(u)) : kurve === 2 ? hart(u, knie) : Math.tanh(u));
+/** The Hard clip with a knee (knie in dB, 0..12): k = min(0.75, 1 - 10^(-knie/20)); f(a) = a up to 1-k, a - (a-(1-k))^2/(4k) up to 1+k, 1 above; odd. */
+function hart(u, knie) {
+  const k = Math.min(0.75, 1 - 10 ** (-knie / 20)), a = Math.abs(u);
+  const f = k <= 0 ? Math.min(1, a) : a <= 1 - k ? a : a < 1 + k ? a - (a - (1 - k)) ** 2 / (4 * k) : 1;
+  return Math.sign(u) * f;
+}
+/** True when the knee knob applies: only the Hard clip curve has a knee. */
+export const saettHatKnie = (kurve) => Math.round(kurve) === 2;
 /** The face title of the stage: the clip curves are the Cypher Clipper. */
 export const saettTitel = (kurve) => (kurve > 0 ? 'Cypher Clipper' : 'Cypher Saturation');
 
 /** Steady-state output for the input amplitude x (linear, 1 = full scale): x + mix * (out_lin * c * f(drive_lin * x / c) - x), c = 10^(ceiling / 20). */
 export function saettAusgang(x, e) {
-  const { drive, out, mix, kurve, decke } = saettEinstellung(e);
+  const { drive, out, mix, kurve, decke, knie } = saettEinstellung(e);
   const c = 10 ** (decke / 20);
-  return x + mix * (10 ** (out / 20) * c * form(Math.round(kurve), 10 ** (drive / 20) * x / c) - x);
+  return x + mix * (10 ** (out / 20) * c * form(Math.round(kurve), 10 ** (drive / 20) * x / c, knie) - x);
 }
 
 /** The curve from -1 to 1, both ends included: [[x, y]] with n points. */
@@ -38,7 +46,7 @@ export function saettKurve(e, n = 201) {
   return aus;
 }
 
-/** {name: {name, label, min, max, log, einheit, vorgabe}} for the knob plate (all three knobs are linear). */
+/** {name: {name, label, min, max, log, einheit, vorgabe}} for the knob plate (all knobs are linear). */
 export const saettParameterTabelle = (liste = SAETT_PARAMETER) => Object.fromEntries(liste.map((q) => [q.name, { name: q.name, label: q.label, min: q.min, max: q.max, log: false, einheit: q.einheit, vorgabe: q.vorgabe }]));
 
 const LOKAL_MS = 800;   // a value the hand just set is shown for this long, before the project echoes it
@@ -66,7 +74,7 @@ export function baueSaettFace(host, quelle) {
     if (l && jetzt() - l.t < LOKAL_MS) return l.v;
     return quelle.get(n);
   };
-  const einstellung = () => saettEinstellung(Object.fromEntries(['drive', 'out', 'mix', 'kurve', 'decke'].map((n) => [n, wert(n)])));
+  const einstellung = () => saettEinstellung(Object.fromEntries(['drive', 'out', 'mix', 'kurve', 'decke', 'knie'].map((n) => [n, wert(n)])));
 
   // ---- the display: x -1..1, y -1.25..1.25, the curve is clipped at the frame
   const ds = baueAnzeige(kurve, { breite: 340, hoehe: 340, rand: 30, x: SAETT_ACHSEN.x, y: SAETT_ACHSEN.y, gitterX: [-1, -0.5, 0, 0.5, 1], gitterY: [-1, -0.5, 0, 0.5, 1],
@@ -78,30 +86,37 @@ export function baueSaettFace(host, quelle) {
   const kurvePfad = ds.pfad('fa-kurve', []);
   const zeichne = () => {
     const e = einstellung();
+    bauePlatte();
     ds.setzePfad(kurvePfad, saettKurve(e));
     titelEl.textContent = saettTitel(e.kurve);
     if (wahlEl.value !== String(e.kurve)) wahlEl.value = String(e.kurve);
     wahlEl.disabled = quelle.gesperrt?.('kurve') === true;
   };
 
-  // ---- the plate
-  const steuer = SAETT_PARAMETER.filter((q) => q.typ !== 'wahl' && quelle.parameter[q.name]).map((q) => ({ param: q.name, typ: 'knob', label: quelle.parameter[q.name].label }));
-  const platte = baueReglerPlatte(platteHost, {
-    titel: '', abschnitte: [{ id: 'r1', cols: Math.max(1, steuer.length), steuer }], parameter: quelle.parameter, akzent: 'rot', dokument: d,
-    adapter: {
-      get: (n) => wert(n),
-      set: (n, v) => {
-        const eintrag = { v, t: jetzt() };
-        lokal.set(n, eintrag);
-        // a refused write (the source resolves false): the knob goes back to the last confirmed value
-        Promise.resolve(quelle.set(n, v)).then((ok) => { if (ok === false && lokal.get(n) === eintrag) { lokal.delete(n); platte.aktualisiere(); zeichne(); } }, () => {});
-        zeichne();
-      },
-      gesperrt: (n) => quelle.gesperrt?.(n) === true,
-      ...(quelle.modKnopf ? { modKnopf: (n) => quelle.modKnopf(n) } : {}),
-      ende: () => quelle.ende?.(),
+  // ---- the plate: the Knee knob is there only for the Hard clip curve, so the plate is rebuilt when the curve crosses it
+  const platteAdapter = {
+    get: (n) => wert(n),
+    set: (n, v) => {
+      const eintrag = { v, t: jetzt() };
+      lokal.set(n, eintrag);
+      // a refused write (the source resolves false): the knob goes back to the last confirmed value
+      Promise.resolve(quelle.set(n, v)).then((ok) => { if (ok === false && lokal.get(n) === eintrag) { lokal.delete(n); platte.aktualisiere(); zeichne(); } }, () => {});
+      zeichne();
     },
-  });
+    gesperrt: (n) => quelle.gesperrt?.(n) === true,
+    ...(quelle.modKnopf ? { modKnopf: (n) => quelle.modKnopf(n) } : {}),
+    ende: () => quelle.ende?.(),
+  };
+  let platte = null, mitKnie = null;
+  const bauePlatte = () => {
+    const knie = saettHatKnie(einstellung().kurve);
+    if (platte && knie === mitKnie) return;
+    platte?.zerstoere();
+    mitKnie = knie;
+    const steuer = SAETT_PARAMETER.filter((q) => q.typ !== 'wahl' && (q.name !== 'knie' || knie) && quelle.parameter[q.name]).map((q) => ({ param: q.name, typ: 'knob', label: quelle.parameter[q.name].label }));
+    platte = baueReglerPlatte(platteHost, { titel: '', abschnitte: [{ id: 'r1', cols: Math.max(1, steuer.length), steuer }], parameter: quelle.parameter, akzent: 'rot', dokument: d, adapter: platteAdapter });
+  };
+  bauePlatte();
   // a bypassed stage does nothing to the signal: the drawing is dimmed
   let gedimmt = null;
   const dimme = () => {
@@ -126,7 +141,7 @@ export function baueSaettFace(host, quelle) {
   };
   zeichne(); dimme(); zeigeKlipp(jetzt());
   return {
-    aktualisiere() { platte.aktualisiere(); zeichne(); dimme(); zeigeKlipp(jetzt()); },
+    aktualisiere() { bauePlatte(); platte.aktualisiere(); zeichne(); dimme(); zeigeKlipp(jetzt()); },
     live(zeit = jetzt()) { dimme(); return zeigeKlipp(zeit); },
     zerstoere() { platte.zerstoere(); wurzel.remove?.(); },
   };

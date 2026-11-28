@@ -1,6 +1,6 @@
 // Strand 5 slice 4 (task 4.1): an EQ stage listens to a key. The dynamic bands in key mode (dyn 3 above with key, 4 below with key) detect on the key instead of the stage input:
 // the row ins/eq/<n>/sc (parameter 85: 0 = own signal, 1..128 = the input of that track before any chain, as komp sc) or a structural key of the chain entry (as komp, which wins).
-// The key index space of ArrInserts covers komp, then eq, then host (ARR_INS_SCHL = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_HOST).
+// The key index space of ArrInserts covers komp, then eq, then host, then (strand 13 slice 4) mb (ARR_INS_SCHL = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_HOST + ARR_INS_MB).
 // Cases: 1 zeile_duckt (row sc = the kick track: band 1 Low shelf dyn 3 cuts the bass by >= 6 dB during every kick and < 1 dB between them),
 // 2 struktur_duckt (the same with a structural key, the post of the kick track, row sc 0),
 // 3 ohne_schluessel (no key: a band in key mode acts as own detection: a quiet bass is not cut although the kick plays; a loud bass in mode 3 equals mode 1 bit for bit),
@@ -210,10 +210,10 @@ int main() {
       PRUEF(d.min == 0.0f && d.max == 128.0f && d.vorgabe == 0.0f && d.kurve.typ == cypherdj::stellwerk::KurvenTyp::stufen && d.ganzzahlig);
     }
     PRUEF(cdj::INS_EQ_SC == 85 && cdj::INS_EQ_PARAM == 86 && cdj::INS_PARAM_MAX == 86);
-    PRUEF(cdj::ARR_INS_SCHL == cdj::ARR_INS_KOMP + cdj::ARR_INS_EQ + cdj::ARR_INS_HOST);
+    PRUEF(cdj::ARR_INS_SCHL == cdj::ARR_INS_KOMP + cdj::ARR_INS_EQ + cdj::ARR_INS_HOST + cdj::ARR_INS_MB);   // strand 13 slice 4: + mb
     PRUEF(cdj::ins_schl_index(0) == 0 && cdj::ins_schl_index(cdj::INS_G_EQ0) == cdj::ARR_INS_KOMP && cdj::ins_schl_index(cdj::INS_G_SAETT0 - 1) == cdj::ARR_INS_KOMP + cdj::ARR_INS_EQ - 1);
     PRUEF(cdj::ins_schl_index(cdj::INS_G_SAETT0) == -1 && cdj::ins_schl_index(cdj::INS_G_HOST0) == cdj::ARR_INS_KOMP + cdj::ARR_INS_EQ);
-    PRUEF(cdj::ins_schl_index(cdj::INS_G_HOST0 - 1) == -1 && cdj::ins_schl_index(cdj::ARR_INS_ALLE - 1) == cdj::ARR_INS_SCHL - 1);
+    PRUEF(cdj::ins_schl_index(cdj::INS_G_HOST0 - 1) == -1 && cdj::ins_schl_index(cdj::ARR_INS_ALLE - 1) == cdj::INS_SCHL_MB0 - 1);   // strand 13 slice 4: the mb key indices follow the host ones
     for (int k = 0; k < cdj::ARR_INS_SCHL; ++k) PRUEF(cdj::ins_schl_index(cdj::ins_schl_slot(k)) == k);
     // the row binds to parameter 85 of the slot: the row value is what the key planning reads (a key track in the mask)
     Lauf l;

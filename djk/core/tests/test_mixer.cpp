@@ -14,9 +14,11 @@
 
 #include "cypherdj/arr_playback.h"
 #include "cypherdj/mixer.h"
+#include "cypherdj/signalbox/insert_zahlen.h"
 #include "check.h"
 
 namespace sw = cypherdj::stellwerk;
+namespace iz = cypherdj::insert_zahlen;
 namespace dsp = cypherdj::dsp;
 
 static float rauschen(uint32_t& z) {  // deterministisch, −0,5 .. 0,5
@@ -61,13 +63,13 @@ int main() {
     // S14: fx/3, fx/4 x 8 bk/<n>, global, the Mixer ignores them (the kern ctor carries the values to the send graphs)
     // 1.10 slice 4a T1: plus the 120 ins/komp/<n>/* rows, global, owned by the Arrangement module (the Mixer ignores them)
     // strand 5 slice 3: trans 6 rows x 32, bild 7 rows x 16 (saett 32 through the constant)
-    // strand 1 slices 4 and 5: lim 3 rows x 8, host 1 row x 8, gate 8 rows x 16, mb 24 rows x 8, written from the constants
-    // strand 1 slices 1, 3 and 3b: the komp and eq rows follow the pool sizes (10 per compressor, 59 per EQ, 85 since strand 5 slice 2; saett 6 rows since strand 5 slice 1; 160 + 160 since slice 3b), so they are written from the constants
+    // strand 1 slices 4 and 5: lim 3 rows x 8, host 1 row x 8, gate 8 rows x 16, mb 24 rows x 8 (34 since strand 13 slice 4: u1..u3 x 3, sc), written from the constants
+    // strand 1 slices 1, 3 and 3b: the komp and eq rows follow the pool sizes (10 per compressor, 12 since strand 13 slice 1 (glue, auto), 59 per EQ, 85 since strand 5 slice 2; saett 6 rows since strand 5 slice 1, 7 since strand 13 slice 2; 160 + 160 since slice 3b), so they are written from the constants
     // slice 6.1: + 24 rows for tracks 33..128 (the in-place blocks count
     // SPUR_REGLER_SPUREN_ALT tracks, slice 6.3)
     PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * sw::SPUR_REGLER_SPUREN_ALT + 4 * sw::GRP_REGLER_GRUPPEN_ALLE + 1 + 4 * 8 +
-          204 + 4 * sw::GRP_REGLER_GRUPPEN_NEU + 2 * 8 + 10 * cdj::ARR_INS_KOMP + 86 * cdj::ARR_INS_EQ + 6 * cdj::ARR_INS_SAETT + 48 + 3 * cdj::ARR_INS_LIM +
-          cdj::ARR_INS_HOST + 8 * 5 + 8 * 65 + 8 * cdj::ARR_INS_GATE + 24 * cdj::ARR_INS_MB + 6 * cdj::ARR_INS_TRANS + 7 * cdj::ARR_INS_BILD + 6 * 56 + sw::GRP_REGLER_GRUPPEN_ALLE +
+          204 + 4 * sw::GRP_REGLER_GRUPPEN_NEU + 2 * 8 + iz::ZEILEN_GESAMT +   // every insert row, from insert_module.json
+           6 * 56 + sw::GRP_REGLER_GRUPPEN_ALLE +
           sw::BK_REGLER_N + sw::SPUR_BK_SLOTS * sw::SPUR_BK_KNOEPFE + sw::SPUR_FILTER_N + 3 * sw::SPUR_EQ_N +
           sw::STROM_BK_STROEME * sw::BK_REGLER_N + 5 * sw::SPUR_REGLER_SPUREN_ALT + 3 * sw::SPUR_REGLER_SPUREN_ALT +
           (sw::RET_REGLER_RETURNS - sw::RET_REGLER_RETURNS_ALT) * (sw::SPUR_REGLER_SPUREN_ALT + sw::GRP_REGLER_GRUPPEN_ALLE + 11) +

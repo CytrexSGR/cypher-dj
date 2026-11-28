@@ -3,9 +3,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import { ruhendeSteuerungen } from '../public/panel_wirkung.js';
 import { steuerungen } from '../public/panel.js';
+import { werksgraphPfad } from './werksgraph_path.mjs';
 
 const panel = (name) => steuerungen(JSON.parse(fs.readFileSync(new URL(`../../instruments/modular_dsp/paneele/${name}.json`, import.meta.url), 'utf8')));
 const regelnPruefen = (titel, name, mindestens) => test(`${titel}: every rule names controls of the panel`, () => {
@@ -28,7 +28,7 @@ const GRUPPE = {
 };
 for (const [name, n] of Object.entries(GRUPPE)) regelnPruefen(name, name, n);
 
-const graphPfad = (name) => `${os.homedir()}/cypherdj/werke/geraete/${name}.json`;
+const graphPfad = werksgraphPfad;   // repo source first, the user's graph folder only for graphs the repo does not carry (the CI home is empty)
 for (const name of Object.keys(GRUPPE)) {
   test(`${name}: every knob of the graph is bound by a control`, { skip: !fs.existsSync(graphPfad(name)) && 'graph not installed' }, () => {
     const g = JSON.parse(fs.readFileSync(graphPfad(name), 'utf8'));

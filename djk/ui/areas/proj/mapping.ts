@@ -108,7 +108,7 @@ export function alleRetRegler(p: Projekt): Soll[] {
   return aus;
 }
 // 1.10 slice 4a/4b: ALL pooled rows ins/<art>/<slot>/* of every kind
-// (komp 10 per slot, eq 85, saett 6, lim 3, host 1, utility 5, bk 9, gate 8, mb 24, trans 6, bild 7; the switch last).
+// (komp 12 per slot, eq 85, saett 7, lim 3, host 1, utility 5, bk 9, gate 8, mb 24, trans 6, bild 7; the switch last).
 // A used slot gets the values of its stage, a free slot the pool defaults with the switch off: the core keeps the rows of the
 // previously opened project, and a stage added later sends
 // only the rows that differ from the defaults (commands.ts insertReglerAenderungen), so a stale free slot would sound through it.

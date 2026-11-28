@@ -580,7 +580,28 @@ void Kern::pegel_melden(int64_t n0, int n) {
   }
   for (int k = 0; k < ARR_INS_SAETT; ++k) ins_gr_melden(ArrInsArt::saett, k, "ins/saett/", sizeof "ins/saett/" - 1);   // strand 5 slice 1: how far the stage clips over its ceiling, dB
   for (int k = 0; k < ARR_INS_GATE; ++k) ins_gr_melden(ArrInsArt::gate, k, "ins/gate/", sizeof "ins/gate/" - 1);   // strand 1 slice 4
-  for (int k = 0; k < ARR_INS_MB; ++k) ins_gr_melden(ArrInsArt::mb, k, "ins/mb/", sizeof "ins/mb/" - 1);
+  for (int k = 0; k < ARR_INS_MB; ++k) {
+    ins_gr_melden(ArrInsArt::mb, k, "ins/mb/", sizeof "ins/mb/" - 1);
+    // strand 13 slice 4: ins/mb/<n>/b<m>, the signed change of band m (positive = reduction, negative = lift), only for a stage that ran; the path by hand, no snprintf
+    static_assert(ARR_INS_MB <= 9, "ins/mb/<n> has one digit");
+    static_assert(sizeof(Ereignis::pfad) >= sizeof "ins/mb/9/b3", "ins/mb/<n>/b<m> and the terminator fit into Ereignis::pfad");
+    const int g = ins_global(ArrInsArt::mb, k);
+    if (g < 0 || !arr_->inserts().lief(g)) continue;
+    for (int b = 0; b < 3; ++b) {
+      Ereignis e{};
+      e.art = Ereignis::INS_GR;
+      e.sample = n0;
+      std::memcpy(e.pfad, "ins/mb/", sizeof "ins/mb/" - 1);
+      char* z = e.pfad + (sizeof "ins/mb/" - 1);
+      *z++ = static_cast<char>('1' + k);
+      *z++ = '/';
+      *z++ = 'b';
+      *z++ = static_cast<char>('1' + b);
+      *z = '\0';
+      e.wert = arr_->inserts().gr_band_db(k, b);
+      melde(e);
+    }
+  }
   for (int k = 0; k < ARR_INS_TRANS; ++k) ins_gr_melden(ArrInsArt::trans, k, "ins/trans/", sizeof "ins/trans/" - 1);   // strand 5 slice 3: the largest gain change of the shaper, dB
   for (int k = 0; k < MIX_QUELLEN; ++k) {   // T9: komp/<channel>, the input and output peak of the channel compressor of every source channel that ran it in the last block
     if (!mixer_->komp_aktiv(k)) {           // not running: drop the peaks (the stage clears them itself when switched off)

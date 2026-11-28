@@ -1,16 +1,18 @@
 // 1.10 slice 4a, seam S4: the request that playback.ts writes for a project with a compressor on a track, a group, a return (pre) and the production
 // master is the committed fixture djk/core/tests/data/wiedergabe_ketten.json, and the real kern loader reads that very file
 // (djk/core/tests/test_arr_seam_page.cpp, ctest). This test regenerates the file from the project and fails when the committed one differs, so
-// the fixture cannot go stale. Rewrite it with CYPHERDJ_FIXTURE_SCHREIBEN=1 node --test tests/seam_core_playback.test.mjs
+// the fixture cannot go stale. Rewrite it with djk/tools/pins_follow_up.sh (CYPHERDJ_PINS_SCHREIBEN=1, alias CYPHERDJ_FIXTURE_SCHREIBEN=1) or node --test tests/seam_core_playback.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fuehreListeAus, setzeDekodiert } from '../project/commands.ts';
+import { pinsSchreiben, pinText } from './support/pins.mjs';
 import { neuesProjekt } from '../project/model.ts';
 import { uebersetze } from '../project/playback.ts';
 import { reglerAusProjekt } from '../project/render.ts';
+import { INSERT_ARTEN } from '../project/insert_key.ts';
 
 const DATEN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'core', 'tests', 'data');
 const FIXTURE = path.join(DATEN, 'wiedergabe_ketten.json');
@@ -36,13 +38,14 @@ export function projekt() {
   setzeDekodiert(p, () => 'fertig');
   return p;
 }
+const KOMP_STUFEN = 4;   // the compressor stages the fixture places: track, group, return, production master
 export const ketten = () => uebersetze(projekt(), { nr: 1, audioOrdner: '@AUDIO@', frames: () => FRAMES });
 
 test('naht_kern: the fixture of the kern loader test is what playback.ts writes today', () => {
   const text = JSON.stringify(ketten(), null, 1) + '\n';
-  if (process.env.CYPHERDJ_FIXTURE_SCHREIBEN === '1') fs.writeFileSync(FIXTURE, text);
+  if (pinsSchreiben()) fs.writeFileSync(FIXTURE, text);
   assert.equal(fs.readFileSync(FIXTURE, 'utf8'), text,
-    'djk/core/tests/data/wiedergabe_ketten.json is stale: rerun with CYPHERDJ_FIXTURE_SCHREIBEN=1 and run the kern test test_arr_naht_seite');
+    pinText('djk/core/tests/data/wiedergabe_ketten.json is stale; then run the kern test test_arr_naht_seite'));
 });
 
 test('naht_kern: the export control file of the kern render test is what reglerAusProjekt writes today', () => {
@@ -50,7 +53,8 @@ test('naht_kern: the export control file of the kern render test is what reglerA
   const text = JSON.stringify(r, null, 1) + '\n';
   if (process.env.CYPHERDJ_FIXTURE_SCHREIBEN === '1') fs.writeFileSync(FIXTURE_REGLER, text);
   assert.equal(fs.readFileSync(FIXTURE_REGLER, 'utf8'), text, 'djk/core/tests/data/render_regler_ketten.json is stale: rerun with CYPHERDJ_FIXTURE_SCHREIBEN=1');
-  assert.equal(Object.keys(r).filter((k) => k.startsWith('ins/komp/')).length, 40, '4 stages x 10 rows');
+  assert.equal(Object.keys(r).filter((k) => k.startsWith('ins/komp/')).length, KOMP_STUFEN * INSERT_ARTEN.komp.parameter.length,
+    `${KOMP_STUFEN} stages x the compressor rows of insert_module.json`);
   assert.equal(r['ins/komp/4/an'], 1, 'the PM stage is on');
   assert.equal(r['ins/komp/1/an'], 0, 'the bypassed track stage is a row, not a missing stage');
 });
@@ -84,9 +88,9 @@ export function rackProjekt() {
 test('naht_kern rack: the fixtures of the kern loader and export tests are what playback.ts and render.ts write today', () => {
   const w = JSON.stringify(uebersetze(rackProjekt(), { nr: 1, audioOrdner: '@AUDIO@', frames: () => FRAMES }), null, 1) + '\n';
   const r = JSON.stringify(reglerAusProjekt(rackProjekt()), null, 1) + '\n';
-  if (process.env.CYPHERDJ_FIXTURE_SCHREIBEN === '1') { fs.writeFileSync(FIXTURE_RACK, w); fs.writeFileSync(FIXTURE_RACK_REGLER, r); }
-  assert.equal(fs.readFileSync(FIXTURE_RACK, 'utf8'), w, 'djk/core/tests/data/wiedergabe_rack.json is stale: rerun with CYPHERDJ_FIXTURE_SCHREIBEN=1');
-  assert.equal(fs.readFileSync(FIXTURE_RACK_REGLER, 'utf8'), r, 'djk/core/tests/data/render_regler_rack.json is stale: rerun with CYPHERDJ_FIXTURE_SCHREIBEN=1');
+  if (pinsSchreiben()) { fs.writeFileSync(FIXTURE_RACK, w); fs.writeFileSync(FIXTURE_RACK_REGLER, r); }
+  assert.equal(fs.readFileSync(FIXTURE_RACK, 'utf8'), w, pinText('djk/core/tests/data/wiedergabe_rack.json is stale'));
+  assert.equal(fs.readFileSync(FIXTURE_RACK_REGLER, 'utf8'), r, pinText('djk/core/tests/data/render_regler_rack.json is stale'));
   const j = JSON.parse(w);
   assert.deepEqual(j.spuren[0].rack, { slot: 1, ziele: [{ makro: 0, stufe: 0, param: 1, von: 0, bis: -60 }] });
   const regler = JSON.parse(r);
@@ -113,9 +117,9 @@ export function gliederProjekt() {
 }
 test('naht_kern glieder: the fixture of the kern loader test is what playback.ts writes today, in the core index space', () => {
   const w = JSON.stringify(uebersetze(gliederProjekt(), { nr: 1, audioOrdner: '@AUDIO@', frames: () => FRAMES }), null, 1) + '\n';
-  if (process.env.CYPHERDJ_FIXTURE_SCHREIBEN === '1') fs.writeFileSync(FIXTURE_GLIEDER, w);
+  if (pinsSchreiben()) fs.writeFileSync(FIXTURE_GLIEDER, w);
   assert.equal(fs.readFileSync(FIXTURE_GLIEDER, 'utf8'), w,
-    'djk/core/tests/data/wiedergabe_rack_glieder.json is stale: rerun with CYPHERDJ_FIXTURE_SCHREIBEN=1 and run the kern test test_arr_naht_seite');
+    pinText('djk/core/tests/data/wiedergabe_rack_glieder.json is stale; then run the kern test test_arr_naht_seite'));
   assert.deepEqual(JSON.parse(w).spuren[0].rack.ziele.filter((z) => 'glied' in z).map((z) => [z.makro, z.glied, z.param]), [[0, 0, 1], [1, 1, 8], [1, 2, 16]]);
 });
 
@@ -133,8 +137,8 @@ export function eingefrorenProjekt() {
 }
 test('naht_kern eingefroren: the fixture of the kern loader test is what playback.ts writes today, without member targets', () => {
   const w = JSON.stringify(uebersetze(eingefrorenProjekt(), { nr: 1, audioOrdner: '@ARBEIT@/audio', arbeitsordner: '@ARBEIT@', existiert: () => true }), null, 1) + '\n';
-  if (process.env.CYPHERDJ_FIXTURE_SCHREIBEN === '1') fs.writeFileSync(FIXTURE_EINGEFROREN, w);
-  assert.equal(fs.readFileSync(FIXTURE_EINGEFROREN, 'utf8'), w, 'wiedergabe_rack_eingefroren.json is stale: rerun with CYPHERDJ_FIXTURE_SCHREIBEN=1');
+  if (pinsSchreiben()) fs.writeFileSync(FIXTURE_EINGEFROREN, w);
+  assert.equal(fs.readFileSync(FIXTURE_EINGEFROREN, 'utf8'), w, pinText('wiedergabe_rack_eingefroren.json is stale'));
   const s = JSON.parse(w).spuren[0];
   assert.equal(s.art, 'audio');
   assert.deepEqual(s.rack.ziele.map((z) => 'stufe' in z), [true]);

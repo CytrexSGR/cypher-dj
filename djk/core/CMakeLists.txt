@@ -1236,6 +1236,7 @@ test_mutation(test_arr_inserts_mix0_gr_steht_mutation test_arr_inserts CYPHERDJ_
 # 1.10 slice 4b T12: eq and saturator inserts (test_arr_inserts_4b). Each mutation turns its named case red.
 test_mutation(test_arr_inserts_4b_eq_band_vertauscht_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_EQ_BAND_VERTAUSCHT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)       # case 2 (and the b8 binding of case 1)
 test_mutation(test_arr_inserts_eq_schluessel_sc_ignoriert_mutation test_arr_inserts_eq_key CYPHERDJ_MUTATION_INS_EQ_SC_IGNORIERT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # strand 5 slice 4: case 1 (the row key of an eq stage is ignored)
+test_mutation(test_arr_inserts_mb_schluessel_sc_ignoriert_mutation test_arr_inserts_mb_key CYPHERDJ_MUTATION_INS_MB_SC_IGNORIERT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # strand 13 slice 4: case 2 (the row key of an mb stage is ignored)
 test_mutation(test_arr_inserts_4b_saett_aus_nach_drive_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_SAETT_AUS_NACH_DRIVE ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp) # case 4
 test_mutation(test_arr_inserts_4b_pool_plus_eins_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_POOL_PLUS_EINS ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)           # case 5
 test_mutation(test_arr_inserts_4b_nan_durchlass_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_NAN_DURCHLASS ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)               # case 8

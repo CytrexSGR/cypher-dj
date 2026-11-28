@@ -1,0 +1,31 @@
+# Measured seconds per quiet page test file (ui-ruhig of CI runs 155, 158 and 159, 2026-11-28: the TAP durations of the top-level tests, mapped to their file by
+# title; the three runs differ by under 1 s). djk/tools/alles_verteilen.py splits the quiet stage over parallel packages with them (alles.sh --paket).
+# Format: <seconds> <file>. A file that is not listed counts as 5 s. The former server.test.mjs (560 s) is split into five server_*.test.mjs files (own runs, 2026-11-28), the longest takes 148 s.
+147.8 server_track_run.test.mjs
+108.3 server_routes_inventory.test.mjs
+100.2 server_track_restart.test.mjs
+94.2 server_deck_operation.test.mjs
+77.0 server_sound_fx.test.mjs
+93.2 proj_stems.test.mjs
+64.4 proj_recording_auto_hand.test.mjs
+46.9 proj_fix_b4_performance.test.mjs
+25.3 decks_vier.test.mjs
+19.8 safety_net.test.mjs
+17.6 wave.test.mjs
+15.7 proj_analysis_flow.test.mjs
+12.4 pattern_run.test.mjs
+10.8 loop_import.test.mjs
+10.1 project_routing_over_project.test.mjs
+7.8 page_tools.test.mjs
+4.3 media_library.test.mjs
+4.1 prelisten.test.mjs
+3.6 hostverwaltung.test.mjs
+3.1 catalog_job_sources.test.mjs
+1.8 stack.test.mjs
+1.7 ins_gr_stream.test.mjs
+1.0 instrument_track.test.mjs
+0.6 lock.test.mjs
+0.5 catalog_instance.test.mjs
+0.4 ins_level_stream.test.mjs
+0.3 sound_live.test.mjs
+0.1 proj_s3_a17b_transport_window.test.mjs

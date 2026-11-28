@@ -17,6 +17,7 @@ import { presetsBereich } from '../../ui/presets/area.ts';
 import { kollektionenBereich } from '../../ui/collections/area.ts';
 import { neuesProjekt } from '../../ui/project/model.ts';
 import { fuehreListeAus } from '../../ui/project/commands.ts';
+import { handQuelle } from './support/hand_source.mjs';
 
 const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'hand.ts');
 const SECHS = ['presets_suchen', 'presets_lesen', 'presets_speichern', 'presets_anwenden', 'kollektionen', 'kollektion_aendern'];
@@ -451,13 +452,14 @@ test('real routes: a bad beschreibung word is answered with erlaubt through the 
 test('AK-B16-8: tools/list length = the count of tool entries in hand.ts = the number in both AUFRUF.md files', async (t) => {
   const { c } = await aufbau(t, () => null);
   const laenge = (await c.listTools()).tools.length;
-  const quelle = fs.readFileSync(HAND, 'utf8');
+  const quelle = handQuelle();
   const imCode = quelle.split('\n').filter((z) => z.startsWith("  { name: '")).length;
-  assert.equal(imCode, laenge, 'grep -c "^  { name: \'" djk/hand/hand.ts');
+  assert.equal(imCode, laenge, 'grep -c "^  { name: \'" djk/hand/hand*.ts');
   const wurzel = path.resolve(path.dirname(HAND), '..', '..');
   // the English edition lives under docs/veroeffentlichung in the working repo; the public repo carries only djk/hand/AUFRUF.md
   for (const datei of ['djk/hand/AUFRUF.md', 'docs/veroeffentlichung/englisch/djk/hand/AUFRUF.md'].filter((d) => fs.existsSync(path.join(wurzel, d)))) {
-    const md = fs.readFileSync(path.join(wurzel, datei), 'utf8');
+    // number markers (n, filled by djk/tools/zaehlstaende.mjs) are read as the bare number
+    const md = fs.readFileSync(path.join(wurzel, datei), 'utf8').replace(/<!-- zahl:[a-z_]+ -->([^<]*)<!-- \/zahl -->/g, '$1');
     assert.match(md, new RegExp(`^## (Werkzeuge|Tools) \\(${laenge}\\)$`, 'm'), `${datei} heading`);
     assert.ok(md.includes(`= ${laenge};`), `${datei} counting sentence`);
     assert.ok(!/\b65\b/.test(md), `${datei} has no stale 65`);
@@ -465,7 +467,8 @@ test('AK-B16-8: tools/list length = the count of tool entries in hand.ts = the n
   // the public texts name the same number (present in the working repo; the public repo carries them too)
   for (const [datei, muster] of [['docs/veroeffentlichung/public/README.md', /\b(\d+) tools\b/], ['docs/veroeffentlichung/public/docs/features.md', /\b(\d+) tools in the MCP server/]]) {
     if (!fs.existsSync(path.join(wurzel, datei))) continue;
-    assert.equal(Number(fs.readFileSync(path.join(wurzel, datei), 'utf8').match(muster)?.[1]), laenge, `${datei} names the real tool count`);
+    const text = fs.readFileSync(path.join(wurzel, datei), 'utf8').replace(/<!-- zahl:[a-z_]+ -->([^<]*)<!-- \/zahl -->/g, '$1');
+    assert.equal(Number(text.match(muster)?.[1]), laenge, `${datei} names the real tool count`);
   }
   // negative control: the check does see a stale number
   assert.throws(() => assert.match('## Tools (65)', new RegExp(`^## (Werkzeuge|Tools) \\(${laenge}\\)$`, 'm')), assert.AssertionError);

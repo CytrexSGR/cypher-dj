@@ -44,7 +44,7 @@ export function gruendeAusDemCode() {
   for (const d of [...ts(PROJEKT), ...ts('areas/proj'), ...ts('http'), 'catalog.ts']) gruendeAusDatei(d, lies(d), dazu);
   for (const x of BEREICH_GRUENDE) dazu(x, 'BEREICH_GRUENDE');
   // ausdrücklich genannt; jede nur, wenn sie im Code dieses Baums wirklich steht
-  for (const [x, d] of [['intern', 'areas/proj/area.ts'], ['slot_belegt', 'project/commands_helpers.ts'], ['ueber_projekt', 'server.ts']]) {
+  for (const [x, d] of [['intern', 'areas/proj/area.ts'], ['slot_belegt', 'project/commands_helpers.ts'], ['ueber_projekt', 'areas/spur/run.ts']]) {
     if (lies(d).includes(`'${x}'`)) dazu(x, `genannt ${d}`);
   }
   return g;

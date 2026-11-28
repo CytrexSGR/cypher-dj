@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { modellQuelle } from './support/model_source.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installiere } from './helpers/pages_mock.mjs';
@@ -99,7 +100,7 @@ test('E3 keylock off on a transposed cell shows the server nur_keylock text', as
 
 test('E3 the tempo limits of the page equal TEMPO_MIN and TEMPO_MAX of the project model', async () => {
   const { w } = await baue(zelleV());
-  const quelle = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'project', 'model.ts'), 'utf8');
+  const quelle = modellQuelle();
   assert.equal(w.TEMPO_MIN, Number(/export const TEMPO_MIN = (\d+)/.exec(quelle)[1]));
   assert.equal(w.TEMPO_MAX, Number(/export const TEMPO_MAX = (\d+)/.exec(quelle)[1]));
 });

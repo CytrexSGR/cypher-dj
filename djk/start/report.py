@@ -112,7 +112,7 @@ def _version() -> str:
         ver = "unknown"
     fmt = "unknown"
     try:
-        m = re.search(r"export const FORMAT = '([^']+)'", (DJK / "ui" / "project" / "model.ts").read_text(encoding="utf-8"))
+        m = re.search(r"export const FORMAT = '([^']+)'", (DJK / "ui" / "project" / "model_types.ts").read_text(encoding="utf-8"))
         fmt = m.group(1) if m else fmt
     except OSError:
         pass

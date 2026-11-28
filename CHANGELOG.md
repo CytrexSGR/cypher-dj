@@ -3,6 +3,15 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-28, twenty-fifth update (source only, no new package)
+
+**Mix bus**
+- Cypher Glue: a mode of the compressor stage with stepped ratio (1.5, 2, 4, 10), attack and release, and an auto release that follows the program (fast after a transient, slow after sustained reduction). Four starting points for the page and the agent: Bus, Drums, Master and Smash.
+
+**Production**
+- Cypher Clipper: the clip curves (soft and hard) now run at 8x oversampling and the Hard clip has a Knee knob (0 to 12 dB) that rounds the corner; a new Clipper starts with a 3 dB knee, existing ones keep the sharp corner. The saturation stage now delays its track by 80 samples instead of 69, which the delay compensation takes into account.
+- Cypher Multiband: the three-band compressor stage has its own face with draggable crossovers and a gain reduction bar per band, can listen to a key (KEY button, for example the kick ducking only the low band) and lifts quiet material per band (upward compression with a threshold, a ratio of 1 to 4 and a range up to 24 dB; a second bar shows the lift). Existing multiband stages sound as before
+
 ## 2026-11-28, twenty-fourth update (source only, no new package)
 
 **Note editor**

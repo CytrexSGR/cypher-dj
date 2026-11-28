@@ -24,6 +24,9 @@ constexpr int MAX_REGLER = 24576;   // 2026-10-11: 384 → 512 für komp/* je Qu
                                    // strand 5 slice 2: + 4160 rows ins/eq/<n>/d<m>/{dyn,schwelle,bereich} and ins/eq/<n>/{dyn_attack,dyn_release} (22 574 rows); the ceiling, CDJ_Z_REGLER and the version stay.
                                    // strand 5 slice 3: + 472 rows: saett pool 4 -> 32 (168), ins/trans/1..32 (192), ins/bild/1..16 (112) (23 046 rows); the ceiling, CDJ_Z_REGLER and the version stay.
                                    // strand 5 slice 4: + 160 rows ins/eq/<n>/sc (23 206 rows); the ceiling, CDJ_Z_REGLER and the version stay.
+                                   // strand 13 slice 1: + 320 rows ins/komp/<n>/{glue,auto} (23 526 rows); the ceiling, CDJ_Z_REGLER and the version stay.
+                                   // strand 13 slice 2: + 32 rows ins/saett/<n>/knie (23 558 rows); the ceiling, CDJ_Z_REGLER and the version stay.
+                                   // strand 13 slice 4: + 80 rows ins/mb/<n>/u<m>/{schwelle,ratio,bereich} and ins/mb/<n>/sc (23 638 rows); the ceiling, CDJ_Z_REGLER and the version stay.
 constexpr int MAX_KANAELE = 20;     // deck/1..4, erz/1..8, pad/1..2, bus/1..4, master, cue
 
 enum class Rolle : uint8_t {
@@ -117,7 +120,17 @@ enum class Rolle : uint8_t {
   ins_bild_an, ins_bild_grenze_tief, ins_bild_grenze_hoch, ins_bild_breite_tief, ins_bild_breite_mitte, ins_bild_breite_hoch, ins_bild_mono_unter,
   // Strand 5 slice 4 (appended after ins_bild_mono_unter, now the last role: the order stays). The key of an EQ stage ins/eq/<n>/sc (0 = its own signal,
   // 1..128 = the input of that track before any chain, as ins_komp_sc); parameter 85 of the stage.
-  ins_eq_sc
+  ins_eq_sc,
+  // Strand 13 slice 1 (appended after ins_eq_sc, now the last role: the order stays). The glue mode ins/komp/<n>/glue (stepped ratio, attack and
+  // release of a bus compressor) and the auto release ins/komp/<n>/auto of a compressor stage (0/1); parameters 10 and 11 of the stage.
+  ins_komp_glue, ins_komp_auto,
+  // Strand 13 slice 2 (appended after ins_komp_auto, now the last role: the order stays). The knee of the Hard clip curve ins/saett/<n>/knie
+  // (dB 0..12, 0 = the sharp corner); parameter 6 of a saett stage.
+  ins_saett_knie,
+  // Strand 13 slice 4 (appended after ins_saett_knie, now the last role: the order stays). The upward compression of multiband band m,
+  // ins/mb/<n>/u<m>/{schwelle,ratio,bereich} (parameters 24 + (m - 1) * 3 + 0..2; ratio 1 = off), and the key of the stage ins/mb/<n>/sc
+  // (0 = its own signal, 1..128 as ins_komp_sc; parameter 33).
+  ins_mb_u_schwelle, ins_mb_u_ratio, ins_mb_u_bereich, ins_mb_sc
 };
 // strand 2 slice 2: plug/<h>/k<m>. The hosts are ARR_INS_HOST of arr_playback.h (8), which this library cannot include; the knob count is
 // MAX_PLUGIN_REGLER of djk/ui/project/model.ts (16).

@@ -578,8 +578,8 @@ test('djk-hand proj_aendern names the sidechain key, duck_durch_kick and the thr
   const { c } = await aufbau(t, () => [200, {}]);
   const werkzeuge = (await c.listTools()).tools;
   const d = werkzeuge.find((x) => x.name === 'proj_aendern').description;
-  assert.match(d, /key\? \(compressor and EQ only, every other sidechain source: \{quelle: spur \| grp \| ret \| deck \| erz, nr, punkt: pre \| post\}/);
-  assert.match(d, /param \(one of werte, or sc on a compressor, or key on a compressor/);
+  assert.match(d, /key\? \(compressor, EQ and multiband only, every other sidechain source: \{quelle: spur \| grp \| ret \| deck \| erz, nr, punkt: pre \| post\}/);
+  assert.match(d, /param \(one of werte, or sc on a compressor, EQ or multiband, or key on a compressor, EQ, multiband or on a host stage/);
   assert.match(d, /duck_durch_kick \{spur_id, kick_id, pos\?\}/);
   for (const grund of ['sidechain_spaet', 'sidechain_zyklus', 'sidechain_quelle']) assert.match(d, new RegExp(`${grund} \\(`), grund);
   assert.match(werkzeuge.find((x) => x.name === 'proj_export').description, /dj_schluessel: true only when a compressor stage is keyed by a DJ input/);

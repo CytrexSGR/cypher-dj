@@ -55,8 +55,8 @@ export function routingMatrix(p: Projekt, optionenFuer?: string): RoutingMatrix 
   if (optionenFuer !== undefined) {
     wahl = alle.find((x) => x.insert.id === optionenFuer);
     if (!wahl) throw new BefehlFehler('argument_ungueltig', `optionen: no stage ${optionenFuer}`);
-    if (wahl.insert.art !== 'komp' && wahl.insert.art !== 'eq' && wahl.insert.art !== 'host') {
-      throw new BefehlFehler('argument_ungueltig', `optionen: only a compressor, EQ or host stage has a key (${wahl.insert.art})`);
+    if (wahl.insert.art !== 'komp' && wahl.insert.art !== 'eq' && wahl.insert.art !== 'mb' && wahl.insert.art !== 'host') {
+      throw new BefehlFehler('argument_ungueltig', `optionen: only a compressor, EQ, multiband or host stage has a key (${wahl.insert.art})`);
     }
   }
   const mitStufen = (strangId: string, st: InsertTraeger): Stufe[] => stufen(st).map((i) => {

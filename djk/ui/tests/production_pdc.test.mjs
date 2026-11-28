@@ -60,7 +60,7 @@ test('pdc: no latency stage, no ring (a project with komp only or one track with
 test('pdc: texts - milliseconds at 48 kHz, the strip row and the header line', () => {
   assert.equal(msText(69), '1.4 ms');
   assert.equal(msText(138), '2.9 ms');
-  assert.match(latenzZeile(projekt('C')), /^Latency 2\.9 ms \(138 samples\)/);
+  assert.match(latenzZeile(projekt('C')), /^Latency 3\.1 ms \(149 samples\)/);
   const r = pdcRechnen(projekt('A')).streifen;
   assert.equal(streifenText(r.s1), 'chain 1.4 ms');
   assert.equal(streifenText(r.s2), 'delayed 1.4 ms to match');

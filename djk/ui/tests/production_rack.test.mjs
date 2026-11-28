@@ -41,7 +41,7 @@ test('rack in inserts.js: which parameters a macro can drive equals the model (c
       n += makroFaehig(parameterVon(art, name)) ? 1 : 0;
     }
   }
-  assert.equal(n, 8 + (1 + 8 * 3 + 8 * 2 + 2) + 4, 'compressor 8 (not the key), EQ out + 8 bands x freq/gain/q + 8 x threshold/range + attack and release (not the dynamic modes), saturator 4 (drive, output, mix, ceiling)');
+  assert.equal(n, 8 + (1 + 8 * 3 + 8 * 2 + 2) + 5, 'compressor 8 (not the key, not the glue and auto switches), EQ out + 8 bands x freq/gain/q + 8 x threshold/range + attack and release (not the dynamic modes), saturator 5 (drive, output, mix, ceiling, knee)');
   // the cases that matter by name: the key, the switches, the step lists
   assert.equal(modell('komp', 'sc'), false); assert.equal(modell('eq', 'b1/typ'), false); assert.equal(modell('eq', 'propq'), false);
   assert.equal(modell('eq', 'b1/freq'), true); assert.equal(modell('komp', 'schwelle'), true);

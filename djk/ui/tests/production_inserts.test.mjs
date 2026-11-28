@@ -7,7 +7,7 @@ import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { INSERT_ARTEN } from '../project/insert_key.ts';
 import { poolVoll } from './support/inserts_scenario.mjs';
-import { KOMP_PARAMETER, KOMP_VOLL_TEXT, MAX_PLAETZE, MAX_KOMP, MAX_EQ, MAX_SAETT, MAX_LIM, LIM_PARAMETER, MAX_UTIL, UTIL_PARAMETER, MAX_GATE, MAX_MB, MAX_TRANS, MAX_BILD, TRANS_PARAMETER, BILD_PARAMETER, GATE_PARAMETER, MB_KOPF_PARAMETER, MB_BAND_PARAMETER, MB_BAENDER, MB_BAND_NAMEN, parameterNamen, parameterLabel, MAX_BK, BK_PARAMETER, BK_STANDARD_GRAPH, plaetze, neuerInsertBefehl, paramBefehl, preBefehl,
+import { KOMP_PARAMETER, KOMP_VOLL_TEXT, MAX_PLAETZE, MAX_KOMP, MAX_EQ, MAX_SAETT, MAX_LIM, LIM_PARAMETER, MAX_UTIL, UTIL_PARAMETER, MAX_GATE, MAX_MB, MAX_TRANS, MAX_BILD, TRANS_PARAMETER, BILD_PARAMETER, GATE_PARAMETER, MB_KOPF_PARAMETER, MB_BAND_PARAMETER, MB_UP_PARAMETER, MB_BAENDER, MB_BAND_NAMEN, parameterNamen, parameterLabel, MAX_BK, BK_PARAMETER, BK_STANDARD_GRAPH, plaetze, neuerInsertBefehl, paramBefehl, preBefehl,
   SAETT_PARAMETER, EQ_DYN_PARAMETER, EQ_DYN_KOPF, EQ_DYN_MODI, eqTitel, EQ_KOPF_PARAMETER, EQ_BAND_PARAMETER, EQ_BAENDER, EQ_BAND_TYP_VORGABE, EQ_BAND_FREQ_VORGABE, EQ_TYPEN, EQ_STEIL, EQ_PLATZ, parameterVon, wertText,
   freqVonPos, posVonFreq, makroFaehig, POS_MAX, anzahl, frei, ARTEN,
   INS_GR_FRIST_MS, insGrAufnehmen, insGrLesung, insGrLesungArt, insPegelAufnehmen, insPegelLesung, insGrAblaufIn, insGrText } from '../public/production/inserts.js';
@@ -63,6 +63,19 @@ test('inserts.js: gain-reduction readings (/e/ins_gr): taken per slot, clamped, 
     { kanal: 'ins/komp/2', gr_db: '3' }, { gr_db: 1 }, null]) assert.equal(insGrAufnehmen(g, f, 1000), false, JSON.stringify(f));
   assert.equal(g[2], undefined, 'nothing was taken for slot 2');
   assert.equal(insGrText(null), '–'); assert.equal(insGrText(4.46), '4.5 dB');
+});
+
+test('inserts.js strand 13 slice 4: per-band readings of an mb stage (ins/mb/<n>/b<m>) are stored signed as `mb<n>/b<m>`, apart from the stage reading', () => {
+  const g = {};
+  assert.equal(insGrAufnehmen(g, { kanal: 'ins/mb/2', gr_db: 4 }, 1000), true);
+  assert.equal(insGrAufnehmen(g, { kanal: 'ins/mb/2/b1', gr_db: 3.5 }, 1000), true);
+  assert.equal(insGrAufnehmen(g, { kanal: 'ins/mb/2/b3', gr_db: -6 }, 1000), true);
+  assert.equal(insGrLesung(g, 'mb2/b1', 1100), 3.5);
+  assert.equal(insGrLesung(g, 'mb2/b3', 1100), -6, 'a lift stays negative');
+  assert.equal(insGrLesungArt(g, 'mb', 2, 1100), 4, 'the stage reading is its own');
+  assert.equal(insGrLesung(g, 'mb2/b3', 1500), null, '500 ms rule');
+  for (const f of [{ kanal: 'ins/mb/2/b4', gr_db: 1 }, { kanal: 'ins/mb/2/b0', gr_db: 1 }, { kanal: 'ins/mb/0/b1', gr_db: 1 }, { kanal: 'ins/mb/9/b1', gr_db: 1 },
+    { kanal: 'ins/mb/2/b1', gr_db: NaN }, { kanal: 'ins/komp/2/b1', gr_db: 1 }, { kanal: 'ins/mb/2/b1/x', gr_db: 1 }]) assert.equal(insGrAufnehmen(g, f, 1000), false, JSON.stringify(f));
 });
 
 test('inserts.js T8: limiter readings (ins/lim/1..MAX_LIM) are taken apart from the compressor readings, ins/lim/(MAX_LIM+1), ins/lim/0 and one komp slot beyond the pool are refused, the 500 ms rule holds', () => {
@@ -138,7 +151,13 @@ test('inserts.js 4b: the literal saturator and EQ tables equal the generated con
   assert.equal(ARTEN.trans.kurz, 'Trans'); assert.equal(ARTEN.trans.neu, 'Add a transient shaper (attack, sustain)'); assert.equal(ARTEN.bild.kurz, 'Width'); assert.equal(ARTEN.bild.name, 'imager');
   // the multiband: two crossover rows and the same rows for each of the three bands, nothing more and nothing less than the contract
   const mb = Object.fromEntries(vertragWerte('mb').map((q) => [q.name, q]));
-  assert.equal(Object.keys(mb).length, MB_KOPF_PARAMETER.length + MB_BAENDER * MB_BAND_PARAMETER.length);
+  assert.equal(Object.keys(mb).length, MB_KOPF_PARAMETER.length + MB_BAENDER * (MB_BAND_PARAMETER.length + MB_UP_PARAMETER.length), 'the crossovers, the band rows and the upward rows');
+  for (let m = 1; m <= MB_BAENDER; m++) for (const q of MB_UP_PARAMETER) {   // strand 13 slice 4: the upward group u<m>
+    const v = mb[`u${m}/${q.name}`], l = parameterVon('mb', `u${m}/${q.name}`);
+    assert.ok(v, `u${m}/${q.name} is in the contract`);
+    assert.deepEqual([l.min, l.max, l.vorgabe, l.einheit], [v.min, v.max, v.vorgabe, v.einheit], `u${m}/${q.name}`);
+  }
+  assert.equal(parameterLabel('mb', 'u2/ratio'), 'Mid band Upward ratio');
   for (const q of MB_KOPF_PARAMETER) assert.deepEqual([q.min, q.max, q.vorgabe, q.einheit], [mb[q.name].min, mb[q.name].max, mb[q.name].vorgabe, mb[q.name].einheit], q.name);
   for (let m = 1; m <= MB_BAENDER; m++) for (const q of MB_BAND_PARAMETER) {
     const v = mb[`b${m}/${q.name}`], l = parameterVon('mb', `b${m}/${q.name}`);

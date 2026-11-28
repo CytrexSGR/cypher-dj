@@ -42,7 +42,8 @@ const mitAllem = () => {   // 3 tracks, group g1 (s2, s3), return r1, r2
   p = ok(p, { befehl: 'gruppenspur_neu', mitglieder: ['s2', 's3'] }).projekt;
   return ok(p, { befehl: 'return_neu' }).projekt;
 };
-const DEF = { schwelle: -18, ratio: 4, knie: 6, attack: 10, release: 120, makeup: 0, mix: 1, schp: 0 };
+// the compressor defaults from the contract (rows `an` and `sc` are not values): schwelle -18, ratio 4, ... and the switches glue and auto at 0
+const DEF = Object.fromEntries(INSERT_ARTEN.komp.parameter.filter((q) => q.name !== 'an' && q.name !== 'sc').map((q) => [q.name, q.vorgabe]));
 
 test('limits equal the generated contract (pool sizes and chain length)', () => {
   assert.equal(MAX_INSERTS_PRO_STRANG, 5);
@@ -792,7 +793,7 @@ test('alleInsertRegler(p, bekannt): a free slot row the core holds at the defaul
   const p = setze(mit(1), 's1', 'komp');
   p.spuren[0].inserts[0].slot = 3;
   const full = alleInsertRegler(p);
-  const ROWS = { komp: 10, eq: 85, saett: 4, lim: 3, host: 1, utility: 5, bk: 9 };
+  const ROWS = { ...Object.fromEntries(['komp', 'eq', 'saett', 'lim', 'utility', 'bk'].map((art) => [art, INSERT_ARTEN[art].parameter.length])), host: 1 };   // rows per slot from the contract
   const proArt = (liste, art) => liste.filter((r) => r.pfad.startsWith(`ins/${art}/`));
   for (const art of Object.keys(ROWS)) {
     assert.ok(proArt(full, art).length > 0, art);
@@ -815,7 +816,7 @@ test('alleInsertRegler(p, bekannt): a free slot row the core holds at the defaul
 });
 
 // ---- gate and mb kinds (strand 1 slice 4): noise gate (16 x 8 rows) and three-band compressor (8 x 24 rows); no key, no preset, latency 0 --------------
-const vorgabeVon = (art) => Object.fromEntries(INSERT_ARTEN[art].parameter.filter((q) => q.name !== 'an').map((q) => [q.name, q.vorgabe]));
+const vorgabeVon = (art) => Object.fromEntries(INSERT_ARTEN[art].parameter.filter((q) => q.name !== 'an' && q.name !== 'sc').map((q) => [q.name, q.vorgabe]));   // strand 13 slice 4: the mb key row sc is no stored value (as komp and eq)
 test('gate and mb: the pools and the row counts are the contract ones, the kinds are accepted', () => {
   assert.equal(MAX_INS_GATE, INSERT_ARTEN.gate.instanzen);
   assert.equal(MAX_INS_MB, INSERT_ARTEN.mb.instanzen);

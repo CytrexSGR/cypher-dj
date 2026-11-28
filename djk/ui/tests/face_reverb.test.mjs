@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { modellQuelle } from './support/model_source.mjs';
 import { hallEinstellung, hallParameterTabelle, hallNormVon, hallT60, hallFahneDb, hallZeit, hallZeitEnde, baueHallFace, HALL_FEST, HALL_KNOEPFE, HALL_NORM_VORGABE } from '../public/face/reverb.js';
 import { HALL_TABELLE, hallEinheit } from '../public/production/routing.js';
 import { oeffneFace } from '../public/face/frame.js';
@@ -42,7 +43,7 @@ test('face/reverb.js: the fixed values equal the core (source pin) and the defau
   const kern = fs.readFileSync(new URL('../../core/src/arr_returns.cpp', import.meta.url), 'utf8');
   for (const zeile of ['e.frueh = 0.5;', 'e.hoch_faktor = 0.6;', 'e.lowcut_hz = 80.0;']) assert.ok(kern.includes(zeile), `arr_returns.cpp lost "${zeile}": update HALL_FEST in face/reverb.js`);
   assert.deepEqual(HALL_FEST, { frueh: 0.5, hoch_faktor: 0.6, lowcut_hz: 80 });
-  const modell = fs.readFileSync(new URL('../project/model.ts', import.meta.url), 'utf8');
+  const modell = modellQuelle();
   const m = /HALL_VORGABE[^=]*= \{([^}]*)\}/.exec(modell)[1];
   for (const f of FELDER) assert.equal(Number(new RegExp(`${f}: ([0-9.]+)`).exec(m)[1]), HALL_NORM_VORGABE[f], `default of ${f}`);
 });

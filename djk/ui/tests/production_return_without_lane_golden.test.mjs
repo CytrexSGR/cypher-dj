@@ -8,6 +8,7 @@ import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { starteSeite } from '../check/page_mock.mjs';
 import { freieZiele, freieZieleGruppe, freieZieleStrang } from '../public/production/lanes.js';
+import { pinsSchreiben, pinText } from './support/pins.mjs';
 
 const CHROME = fs.existsSync('/usr/bin/google-chrome');
 const GOLDEN = new URL('./golden/ret_seite_ohne_lane.json', import.meta.url);
@@ -39,15 +40,15 @@ async function erfasse(t) {
 
 test('ret_ohne_lane_seite_gleich_wie_vorher: strip heads and target lists equal the golden', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   const jetzt = await erfasse(t);
-  if (process.env.CYPHERDJ_GOLDEN_SCHREIBEN === '1') { fs.writeFileSync(GOLDEN, JSON.stringify(jetzt, null, 1) + '\n'); return; }
+  if (pinsSchreiben()) { fs.writeFileSync(GOLDEN, JSON.stringify(jetzt, null, 1) + '\n'); return; }
   const golden = JSON.parse(fs.readFileSync(GOLDEN, 'utf8'));
   // The one deliberate change since the golden: the open "+ Lane" menu of a return now starts with Volume (a return without a fader lane is offered one).
   // Everything else in that head is still the golden; the expected string is the golden with exactly that one entry added (menu and its data-optionen key).
-  golden.koepfe_r1_offen = golden.koepfe_r1_offen
+  if (!golden.koepfe_r1_offen.includes('value="fader">Volume</option>')) golden.koepfe_r1_offen = golden.koepfe_r1_offen   // idempotent: a re-pinned golden already has the entry
     .replace('[&quot;&quot;,&quot;+ Lane&quot;],', '[&quot;&quot;,&quot;+ Lane&quot;],[&quot;fader&quot;,&quot;Volume&quot;],')
     .replace('<option value="">+ Lane</option>', '<option value="">+ Lane</option><option value="fader">Volume</option>');
   assert.ok(golden.koepfe_r1_offen.includes('value="fader">Volume</option>') && golden.koepfe_r1_offen.includes('[&quot;fader&quot;,&quot;Volume&quot;]'), 'the golden edit applied');
-  for (const k of Object.keys(golden)) assert.deepEqual(jetzt[k], golden[k], `part ${k} differs from the golden`);
+  for (const k of Object.keys(golden)) assert.deepEqual(jetzt[k], golden[k], pinText(`part ${k} differs from the golden golden/ret_seite_ohne_lane.json`));
   assert.deepEqual(Object.keys(jetzt), Object.keys(golden));
   // negative control: the comparison can fail (a missing `auto` class on the track head would turn the golden red)
   const falsch = golden.koepfe_zu.replace('class="p-kopf auto"', 'class="p-kopf"');

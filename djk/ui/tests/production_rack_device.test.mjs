@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { modellQuelle } from './support/model_source.mjs';
 import { element } from './support/dom_mock.mjs';
 import { bouncePunkte } from '../public/production/bounce.js';
 import { mergePunkte } from '../public/production/merge.js';
@@ -18,7 +19,7 @@ const spur = (i, geraet, extra = {}) => ({ id: `s${i}`, nr: i, name: 'x', farbe:
 const rack = (...glieder) => ({ art: 'rack', kette: 0, glieder });
 
 test('limits equal the model constants', () => {
-  const src = readFileSync(new URL('../project/model.ts', import.meta.url), 'utf8');
+  const src = modellQuelle();
   const k = (n) => Number(new RegExp(`export const ${n} = (-?\\d+)`).exec(src)[1]);
   assert.equal(R.MAX_GLIEDER, k('MAX_GLIEDER'));
   assert.equal(R.MAX_RACK_GERAETE, k('MAX_RACK_GERAETE'));

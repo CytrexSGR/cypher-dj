@@ -12,6 +12,7 @@ import { baueLimiterFace, limParameterTabelle } from '../face/limiter.js';
 import { baueEqFace } from '../face/eq.js';
 import { baueTransientFace, transParameterTabelle } from '../face/transient.js';
 import { baueImagerFace, bildParameterTabelle } from '../face/imager.js';
+import { baueMultibandFace, mbParameterTabelle, mbParameterListe } from '../face/multiband.js';
 import { oeffneMenue } from './context_menu.js';
 import { oeffneGeraetFenster } from '../device_open.js';
 import { stufenBefehle, schluesselMenue } from '../dock/parts.js';
@@ -24,6 +25,7 @@ export const FACE_ARTEN = [
   'eq',
   'trans',
   'bild',
+  'mb',
 ];
 
 const finde = (ctx, strangId, insertId) => {
@@ -68,6 +70,12 @@ export function insertQuelleKomp(ctx, strang, insert, grStand = () => ({}), pege
       const q = KOMP_PARAMETER.find((x) => x.name === param);
       ctx.aendere(`${q?.label ?? param} ${name} on ${strang.name}`, [paramBefehl(i.id, param, v)], `${i.id}:${param}`);
     },
+    // strand 13: several parameters in ONE command list (one undo step), for a Glue style; `paare` = [[param, value]]
+    setzeViele(paare, label) {
+      const { insert: i } = jetzt();
+      if (!i || !paare.length) return;
+      ctx.aendere(`${label} on ${strang.name}`, paare.map(([param, v]) => paramBefehl(i.id, param, v)));
+    },
     an: {
       get: () => jetzt().insert?.an !== false,
       set: (b) => { const { insert: i } = jetzt(); if (i) ctx.aendere(`${b ? 'Enable' : 'Bypass'} ${name} on ${strang.name}`, [anBefehl(i.id, b)]); },
@@ -87,6 +95,7 @@ const faceGeraet = (art) => ({   // a function, not a constant: inserts.js impor
   lim: { titel: 'LIMITER', akzent: 'tuerkis', liste: LIM_PARAMETER, tabelle: limParameterTabelle, bauen: baueLimiterFace },
   trans: { titel: 'TRANSIENT SHAPER', akzent: 'gruen', liste: TRANS_PARAMETER, tabelle: transParameterTabelle, bauen: baueTransientFace },
   bild: { titel: 'IMAGER', akzent: 'tuerkis', liste: BILD_PARAMETER, tabelle: bildParameterTabelle, bauen: baueImagerFace },
+  mb: { titel: 'MULTIBAND', akzent: 'orange', liste: mbParameterListe(), tabelle: mbParameterTabelle, bauen: baueMultibandFace },
 })[art];
 
 /** The source object of such a stage: values from the stage in the project (a macro-driven parameter gives the macro's value and is blocked), writes through
@@ -101,6 +110,10 @@ export function insertQuelleGeraet(ctx, strang, insert, liste, tabelle, grStand 
     } : {}),
     ...(insert.art === 'trans' ? {   // strand 5 slice 3: the largest gain change of the shaper (/e/ins_gr `ins/trans/<n>`), same store and 500 ms rule
       gr: (zeit) => { const { insert: i } = jetzt(); return i ? insGrLesungArt(grStand(), 'trans', i.slot, zeit) : null; },
+    } : {}),
+    ...(insert.art === 'mb' ? {   // strand 13 slice 3: the deepest band (/e/ins_gr `ins/mb/<n>`); the per-band readings `mb<n>/b<m>` of slice 4 come from the same store and 500 ms rule
+      gr: (zeit) => { const { insert: i } = jetzt(); return i ? insGrLesungArt(grStand(), 'mb', i.slot, zeit) : null; },
+      grBand: (m, zeit) => { const { insert: i } = jetzt(); return i ? insGrLesung(grStand(), `mb${i.slot}/b${m}`, zeit) : null; },
     } : {}),
     ...(insert.art === 'lim' ? {
       gr: (zeit) => { const { insert: i } = jetzt(); return i ? insGrLesungArt(grStand(), 'lim', i.slot, zeit) : null; },
@@ -186,8 +199,8 @@ function kopfKnoepfe(ctx, steuer, strangId, insertId, schliesse) {
     knopf('✕', 'Remove this stage', () => { Promise.resolve(tu('weg')).then((ok) => { if (ok !== false && ok !== null) schliesse(); }); }),
   ];
   const { insert } = jetzt();
-  if (insert?.art === 'komp' || insert?.art === 'eq') {
-    knoepfe.unshift(knopf('KEY', insert.art === 'eq' ? 'Key source of this EQ (for its dynamic bands)' : 'Key source of this compressor', (ev) => {
+  if (insert?.art === 'komp' || insert?.art === 'eq' || insert?.art === 'mb') {
+    knoepfe.unshift(knopf('KEY', insert.art === 'eq' ? 'Key source of this EQ (for its dynamic bands)' : insert.art === 'mb' ? 'Key source of this multiband (all three bands listen to it)' : 'Key source of this compressor', (ev) => {
       const { strang, insert: i } = jetzt(); if (!strang || !i) return;
       const q = ev.currentTarget.getBoundingClientRect();
       schluesselMenue({ holeGet: (w) => ctx.holeGet(w), aendere: (...a) => ctx.aendere(...a), melde: (...a) => ctx.melde(...a), fehlerText: ctx.fehlerText,
@@ -212,7 +225,7 @@ export function bindeInsertFace(ctx, grStand, pegelStand = () => ({})) {
     const f = oeffneFace({
       id: `face:${insert.id}`, titel: geraet?.titel ?? 'COMPRESSOR', untertitel: `${strang.name} · stage ${pos + 1}`, akzent: geraet?.akzent ?? 'orange', an: quelle.an, einbetten: ctx.faceEinbettung ?? null,
       bauen: (inhalt, steuer) => { kopfKnoepfe(ctx, steuer, strang.id, insert.id, () => schliesseFace()); bau = geraet ? geraet.bauen(inhalt, quelle) : baueKompFace(inhalt, quelle); return bau; },
-      live: geraet && !['lim', 'saett', 'trans'].includes(insert.art) ? undefined : (zeit) => bau?.live(zeit) ?? false,   // the frame loop runs while this face is open and nowhere else; a face without a live value has none
+      live: geraet && !['lim', 'saett', 'trans', 'mb'].includes(insert.art) ? undefined : (zeit) => bau?.live(zeit) ?? false,   // the frame loop runs while this face is open and nowhere else; a face without a live value has none
     });
     aktuell = f ? { strangId: strang.id, insertId: insert.id, face: f } : null;
     return f;

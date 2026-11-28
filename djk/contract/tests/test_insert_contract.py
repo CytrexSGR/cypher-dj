@@ -31,10 +31,11 @@ def test_veraltete_datei_wird_erkannt():
 
 
 def test_zaehlung_und_tabellenzeilen():
-    """The count follows the contract: rows per instance times instances (the instances come from the contract, the rows per instance are pinned: komp 10,
-    eq 86 (d1..d8 x 3, dyn_attack, dyn_release since strand 5 slice 2, sc since strand 5 slice 4), saett 6 (kurve and decke since strand 5 slice 1), rack 4 macro rows (slice 4c), lim 3, host 1 (plan 1.11 T4), utility 5 (arr-fx slice 1), bk 65 (an and k1..k64, arr-bk slice 3 and the widenings), gate 8, mb 24 (strand 1 slice 4), trans 6 and bild 7 (strand 5 slice 3)); every one a table row."""
+    """The count follows the contract: rows per instance times instances, both read from the contract by its structure (parameters, group size x
+    group parameters, trailing parameters), not from ausfalten(), so the expansion is checked against an independent count. No literal row count here."""
     z = erzeuge_insert.ausfalten(vertrag())
-    je_instanz = {"komp": 10, "eq": 86, "saett": 6, "rack": 4, "lim": 3, "host": 1, "utility": 5, "bk": 65, "gate": 8, "mb": 24, "trans": 6, "bild": 7}   # rows per instance (pinned here)
+    je_instanz = {a["art"]: len(a["parameter"]) + sum(g["anzahl"] * len(g["parameter"]) for g in a.get("gruppen", [])) + len(a.get("parameter_nach", []))
+                  for a in vertrag()["arten"]}   # rows per instance, from the contract
     n = {a["art"]: a["instanzen"] for a in vertrag()["arten"]}                                               # instances (the pool sizes, from the contract)
     erwartet = {art: n[art] * je_instanz[art] for art in je_instanz}
     soll = sum(erwartet.values())
@@ -42,7 +43,8 @@ def test_zaehlung_und_tabellenzeilen():
     assert sum(1 for r in z if r["tabelle"]) == soll
     assert all(r["tabelle"] for r in z if r["art"] == "rack"), "every macro row is a table row (slice 4c)"
     assert {r["art"]: sum(1 for q in z if q["art"] == r["art"]) for r in z} == erwartet
-    assert max(len(r["pfad"]) for r in z) == 24   # ins/utility/8/mono_unter (20 before the utility kind), ins/bild/16/breite_mitte too (strand 5 slice 3); the three-digit slots ins/eq/160/b8/platz (19) stay shorter
+    pin = json.loads((erzeuge_insert.WURZEL / "djk" / "tests" / "zaehlstaende.json").read_text(encoding="utf-8"))["insert_pfad_laenge_max"]
+    assert max(len(r["pfad"]) for r in z) == pin, "[pin] longest insert path: run djk/tools/pins_follow_up.sh"   # at most 31 (MAX_PFAD, checked by pruefe())
 
 
 def test_poolgroessen_sind_die_gemessenen():

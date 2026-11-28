@@ -14,7 +14,7 @@ import { neuerDrehknopf, sendDb, faderText } from './drehknopf.js';
 import { rackTeile, masterTeile, effektKachel } from './stages.js';
 import { mk, knopfEl, frontKnoepfe, MAX_FRONT, farbFeld, meterEl, aufKnopf } from './blocks.js';
 import { teilChip } from './parts.js';
-import { plusKnopf, masterClipZustand } from './plus.js';
+import { plusKnopf, masterClipZustand, masterGlueZustand } from './plus.js';
 import { sendKnoepfe } from './sends.js';
 import { masterLevelSchreiben } from './model.js';
 import { mischerKopf, mischerZeile, untertitelEl, levelStand } from './mischer.js';
@@ -229,6 +229,27 @@ export function clipKnopf(werk) {
   });
   return b;
 }
+/** strand 13 slice 1: the GLUE button of the master strip, the pattern of CLIP: without a glue compressor it puts one (Master recipe) before the first clipper or limiter
+ *  and opens its face; with one it is lit and opens the face. A full chain or pool disables it. */
+export function glueKnopf(werk) {
+  const { host } = werk;
+  const z = masterGlueZustand(host.projekt());
+  const b = knopfEl('w-karte-knopf w-karte-glue', 'karte-glue', 'GLUE', z.insert ? 'Cypher Glue on the master: open its face' : 'Put a Cypher Glue compressor on the master, before the clipper and limiter');
+  b.setAttribute('aria-pressed', String(!!z.insert)); b.classList.toggle('an', !!z.insert);
+  if (!z.insert && !z.befehl) { b.disabled = true; b.title = z.grund; return b; }
+  b.addEventListener('click', async (e) => {
+    e.stopPropagation?.();
+    const a = b.getBoundingClientRect();
+    const jetzt = masterGlueZustand(host.projekt());
+    if (jetzt.insert) { host.oeffneStufe?.('master', jetzt.insert.id, a); return; }
+    if (!jetzt.befehl) return;
+    const vorher = new Set((host.projekt()?.master?.inserts ?? []).map((i) => i.id));
+    if (!(await host.aendere('Add Glue to Master', [jetzt.befehl]))) return;
+    const neu = (host.projekt()?.master?.inserts ?? []).find((i) => !vorher.has(i.id));
+    if (neu) host.oeffneStufe?.('master', neu.id, a);
+  });
+  return b;
+}
 export function masterKarte(werk, meine) {
   const { host, T } = werk;
   const p = host.projekt();
@@ -237,7 +258,7 @@ export function masterKarte(werk, meine) {
   e.setAttribute('data-strang', 'master'); e.style.setProperty('--farbe', MASTER_FARBE);
   const teile = masterTeile(p), erstes = (p?.master?.inserts ?? []).find((i) => i.art === 'bk');
   const kopf = mk('div', 'w-karte-kopf');
-  kopf.append(mk('b', 'w-karte-name', null, T.master), ...latenzSpan(werk, karte), mk('span', 'w-sp'), ...teile.map((t) => teilChip(werk, 'master', t)), plusKnopf(werk, 'master'), clipKnopf(werk),
+  kopf.append(mk('b', 'w-karte-name', null, T.master), ...latenzSpan(werk, karte), mk('span', 'w-sp'), ...teile.map((t) => teilChip(werk, 'master', t)), plusKnopf(werk, 'master'), glueKnopf(werk), clipKnopf(werk),
     ...(karte() ? mischerKopf(host, karte(), werk.frisch) : []), aufKnopf(werk.T, (a) => { if (teile[0]) host.oeffneStufe?.('master', teile[0].teil, a); }, !teile.length), ...zielKnopf(werk, 'master'));
   const zeile = mk('div', 'w-karte-zeile');
   const knoepfe = mk('div', 'w-karte-knoepfe', 'karte-knoepfe');

@@ -40,6 +40,17 @@ void MbDetektor::setze(const MbBandEinstellung& e, double fs) {
     a_abklingen_ = zeitkoeff(e.abklingen_ms, fs);
     a_mittel_steigt_ = zeitkoeff(kMbAusgleichSteigtMs, fs);
     a_mittel_faellt_ = zeitkoeff(kMbAusgleichFaelltMs, fs);
+    auf_schwelle_ = e.auf_schwelle_db;
+    auf_steigung_ = 1.0 - 1.0 / static_cast<double>(e.auf_verhaeltnis);
+    auf_bereich_ = e.auf_bereich_db;
+    h_abfall_ = a_abklingen_;
+}
+
+double MbDetektor::aufwaerts_statisch_db(double x_db) const {
+    if (auf_steigung_ == 0.0) return 0.0;
+    const double up = std::min(auf_bereich_, std::max(0.0, auf_schwelle_ - x_db) * auf_steigung_);
+    const double blende = std::clamp((x_db - kMbAufBodenDb) / (kMbAufVollDb - kMbAufBodenDb), 0.0, 1.0);
+    return up * blende;
 }
 
 double MbDetektor::statisch_db(double x_db) const {
@@ -58,6 +69,33 @@ double MbDetektor::statisch_db(double x_db) const {
 // A step up of the level gives exactly the one-pole attack (y1 jumps, yL follows). Between the peaks of a
 // sine y1 holds with the release coefficient, so tonal signals get the same attack as a step.
 double MbDetektor::schritt(double pegel) {
+    const double g = schritt_ab(pegel);
+    schritt_auf(pegel);
+    return g;
+}
+
+double MbDetektor::schritt(double pegel_ab, double pegel_auf) {
+    const double g = schritt_ab(pegel_ab);
+    schritt_auf(pegel_auf);
+    return g;
+}
+
+// Lift: peak envelope of the band's own level (instant rise, decay with the release coefficient per sample), static upward curve on it,
+// then a one-pole in the dB domain that rises with the release time and falls with the attack time.
+void MbDetektor::schritt_auf(double pegel) {
+    if (auf_steigung_ == 0.0 && u_db_ == 0.0) {  // off and settled: nothing to compute (ratio 1 leaves the band as without this path)
+        h_ = 0.0;
+        return;
+    }
+    h_ = std::max(pegel, h_ * h_abfall_);
+    if (h_ < 1e-15) h_ = 0.0;  // below -300 dBFS: exact 0, no denormals
+    const double ziel = aufwaerts_statisch_db(20.0 * std::log10(std::max(h_, kPegelBoden)));
+    const double a = ziel > u_db_ ? a_abklingen_ : a_anstieg_;
+    u_db_ = a * u_db_ + (1.0 - a) * ziel;
+    if (std::fabs(u_db_ - ziel) < 1e-12) u_db_ = ziel;  // ends the exponential tails (exact target, exact 0)
+}
+
+double MbDetektor::schritt_ab(double pegel) {
     if (steigung_ == 0.0 && y1_ == 0.0 && g_db_ == 0.0 && m_db_ == 0.0) return 0.0;  // ratio 1, settled: nothing to compute
     const double x_db = 20.0 * std::log10(std::max(pegel, kPegelBoden));
     const double r = -statisch_db(x_db);
@@ -75,6 +113,28 @@ double MbDetektor::schritt(double pegel) {
 }
 
 // --- Compressor ----------------------------------------------------------------------------------------------
+
+// One sample of one channel through the crossovers into the three bands.
+void MultibandKompressor::teile(Kanal& k, double x, double* band) {
+    const double a = k.tp_hoch.schritt(x);  // low + mid
+    const double h = k.hp_hoch.schritt(x);
+    band[0] = k.tp_tief.schritt(a);
+    band[1] = k.hp_tief.schritt(a);
+#if defined(CYPHERDJ_DSP_MUTATION_MB_OHNE_ALLPASS)
+    band[2] = h;  // mutation: high band without the phase of the lower crossover
+#else
+    band[2] = k.ap_tief[1].schritt(k.ap_tief[0].schritt(h));
+#endif
+}
+
+void MultibandKompressor::Kanal::leeren() {
+    tp_hoch.leeren();
+    hp_hoch.leeren();
+    tp_tief.leeren();
+    hp_tief.leeren();
+    ap_tief[0].leeren();
+    ap_tief[1].leeren();
+}
 
 void MultibandKompressor::Rampe::setze(double z, int dauer) {
     ziel = z;
@@ -104,7 +164,9 @@ void MultibandKompressor::setze_grenzen(double grenze_tief_hz, double grenze_hoc
     const Lr8 tp_h = lr8_tiefpass(h, fs_), hp_h = lr8_hochpass(h, fs_);
     const Lr8 tp_t = lr8_tiefpass(t, fs_), hp_t = lr8_hochpass(t, fs_);
     const BiquadKoeff ap1 = allpass_2(t, kQ1, fs_), ap2 = allpass_2(t, kQ2, fs_);
-    for (Kanal& k : k_) {  // coefficients only, states stay
+    for (Kanal* k_satz : {k_, ks_})   // audio and key split share the coefficients, states stay
+    for (Kanal* kp = k_satz; kp != k_satz + 2; ++kp) {
+        Kanal& k = *kp;
         for (int i = 0; i < 4; ++i) {
             k.tp_hoch.b[i].k = tp_h.b[i].k;
             k.hp_hoch.b[i].k = hp_h.b[i].k;
@@ -117,17 +179,13 @@ void MultibandKompressor::setze_grenzen(double grenze_tief_hz, double grenze_hoc
 }
 
 void MultibandKompressor::leeren() {
-    for (Kanal& k : k_) {
-        k.tp_hoch.leeren();
-        k.hp_hoch.leeren();
-        k.tp_tief.leeren();
-        k.hp_tief.leeren();
-        k.ap_tief[0].leeren();
-        k.ap_tief[1].leeren();
-    }
+    for (Kanal& k : k_) k.leeren();
+    for (Kanal& k : ks_) k.leeren();
+    ks_laeuft_ = false;
     for (int b = 0; b < kBaender; ++b) {
         det_[b].leeren();
         groesste_[b] = 0.0f;
+        aenderung_[b] = 0.0f;
     }
     ziele_neu(true);
 }
@@ -140,8 +198,9 @@ void MultibandKompressor::uebernehme_detektoren(const MultibandKompressor& o) {
     if (&o == this) return;
     for (int b = 0; b < kBaender; ++b) {   // plain values, no allocation
         einst_[b] = o.einst_[b];
-        det_[b] = o.det_[b];   // coefficients and states
+        det_[b] = o.det_[b];   // coefficients and states (reduction and lift); the key filter states are not copied
         groesste_[b] = o.groesste_[b];
+        aenderung_[b] = o.aenderung_[b];
     }
     ziele_neu(false);   // the gain ramps run to the targets of the copied settings (their position is not copied)
 }
@@ -174,11 +233,15 @@ void MultibandKompressor::setze_band(Band b, const MbBandEinstellung& e) {
     z.aufholen_auto = e.aufholen_auto;
     z.solo = e.solo;
     z.umgehen = e.umgehen;
+    z.auf_schwelle_db = begrenzt(e.auf_schwelle_db, z.auf_schwelle_db, kMbAufSchwelleMinDb, kMbAufSchwelleMaxDb);
+    z.auf_verhaeltnis = begrenzt(e.auf_verhaeltnis, z.auf_verhaeltnis, kMbAufVerhaeltnisMin, kMbAufVerhaeltnisMax);
+    z.auf_bereich_db = begrenzt(e.auf_bereich_db, z.auf_bereich_db, kMbAufBereichMinDb, kMbAufBereichMaxDb);
     // Called every block by the Mixer: an unchanged setting must not re-arm the gain ramps (at a block under 240 samples the 5 ms ramp
     // would restart before it ends and run for 22 ms at n = 128, 30 ms at n = 8).
 #ifndef CYPHERDJ_DSP_MUTATION_MB_RAMPE_NEU   // error case: every call re-arms the ramps
     if (z.schwelle_db == alt.schwelle_db && z.verhaeltnis == alt.verhaeltnis && z.anstieg_ms == alt.anstieg_ms && z.abklingen_ms == alt.abklingen_ms &&
-        z.knie_db == alt.knie_db && z.aufholen_db == alt.aufholen_db && z.aufholen_auto == alt.aufholen_auto && z.solo == alt.solo && z.umgehen == alt.umgehen)
+        z.knie_db == alt.knie_db && z.aufholen_db == alt.aufholen_db && z.aufholen_auto == alt.aufholen_auto && z.solo == alt.solo && z.umgehen == alt.umgehen &&
+        z.auf_schwelle_db == alt.auf_schwelle_db && z.auf_verhaeltnis == alt.auf_verhaeltnis && z.auf_bereich_db == alt.auf_bereich_db)
         return;
 #endif
     det_[static_cast<int>(b)].setze(z, fs_);
@@ -200,23 +263,35 @@ void MultibandKompressor::ziele_neu(bool sofort) {
     }
 }
 
-void MultibandKompressor::verarbeite(const float* in_l, const float* in_r, float* out_l, float* out_r, int n) {
+void MultibandKompressor::verarbeite(const float* in_l, const float* in_r, float* out_l, float* out_r, int n, const float* key_l,
+                                     const float* key_r) {
     [[maybe_unused]] DenormalSchutz schutz;
+    if (key_l == nullptr) key_l = key_r;
+    if (key_r == nullptr) key_r = key_l;
+    const bool mit_key = key_l != nullptr;
+    if (!mit_key && ks_laeuft_) {  // the key went away: clear its filters once, so a key that comes back starts clean
+        for (Kanal& k : ks_) k.leeren();
+        ks_laeuft_ = false;
+    }
+    if (mit_key) ks_laeuft_ = true;
     for (int i = 0; i < n; ++i) {
         double band[kBaender][2];
+        double kband[kBaender][2];
         const float xin[2] = {in_l[i], in_r[i]};
         for (int c = 0; c < 2; ++c) {
-            Kanal& k = k_[c];
             const double x = std::isfinite(xin[c]) ? static_cast<double>(xin[c]) : 0.0;
-            const double a = k.tp_hoch.schritt(x);  // low + mid
-            const double h = k.hp_hoch.schritt(x);
-            band[0][c] = k.tp_tief.schritt(a);
-            band[1][c] = k.hp_tief.schritt(a);
-#if defined(CYPHERDJ_DSP_MUTATION_MB_OHNE_ALLPASS)
-            band[2][c] = h;  // mutation: high band without the phase of the lower crossover
-#else
-            band[2][c] = k.ap_tief[1].schritt(k.ap_tief[0].schritt(h));
-#endif
+            double t[kBaender];
+            teile(k_[c], x, t);
+            for (int b = 0; b < kBaender; ++b) band[b][c] = t[b];
+        }
+        if (mit_key) {
+            const float kin[2] = {key_l[i], key_r[i]};
+            for (int c = 0; c < 2; ++c) {
+                const double x = std::isfinite(kin[c]) ? static_cast<double>(kin[c]) : 0.0;
+                double t[kBaender];
+                teile(ks_[c], x, t);
+                for (int b = 0; b < kBaender; ++b) kband[b][c] = t[b];
+            }
         }
         double y[2] = {0.0, 0.0};
         for (int b = 0; b < kBaender; ++b) {
@@ -229,18 +304,27 @@ void MultibandKompressor::verarbeite(const float* in_l, const float* in_r, float
             const double g[2] = {tr + na * std::exp((gr + au * det_[b].ausgleich_db()) * kLn10Durch20), tr + na};
 #else
             const double pegel = std::max(std::fabs(band[b][0]), std::fabs(band[b][1]));  // stereo-linked
-            const double gr = det_[b].schritt(pegel);
+            const double gr = mit_key ? det_[b].schritt(std::max(std::fabs(kband[b][0]), std::fabs(kband[b][1])), pegel)
+                                      : det_[b].schritt(pegel);
 #ifdef CYPHERDJ_DSP_MUTATION_MB_OHNE_AUSGLEICH   // error case: no automatic make-up, compressing only lowers the band
             const double ausgleich = 0.0;
 #else
             const double ausgleich = au * det_[b].ausgleich_db();
 #endif
-            const double gl = tr + na * std::exp((gr + ausgleich) * kLn10Durch20);
+            double expo = gr + ausgleich;
+            const double up = det_[b].anhebung_db();
+            if (up != 0.0) expo += up;   // upward off: the exponent stays exactly as without the upward path
+            const double gl = tr + na * std::exp(expo * kLn10Durch20);
             const double g[2] = {gl, gl};
 #endif
             y[0] += band[b][0] * g[0];
             y[1] += band[b][1] * g[1];
-            if (!einst_[b].umgehen && gr < groesste_[b]) groesste_[b] = static_cast<float>(gr);
+            if (!einst_[b].umgehen) {
+                if (gr < groesste_[b]) groesste_[b] = static_cast<float>(gr);
+                const double lift = det_[b].anhebung_db();
+                const float v = static_cast<float>(-gr >= lift ? -gr : -lift);   // positive = reduction, negative = lift
+                if (std::fabs(v) > std::fabs(aenderung_[b])) aenderung_[b] = v;
+            }
         }
         out_l[i] = static_cast<float>(y[0]);
         out_r[i] = static_cast<float>(y[1]);
@@ -261,6 +345,18 @@ float MultibandKompressor::groesste_absenkung_db(Band b) {
     const int i = static_cast<int>(b);
     const float g = groesste_[i];
     groesste_[i] = 0.0f;
+    return g;
+}
+
+float MultibandKompressor::aktuelle_anhebung_db(Band b) const {
+    const int i = static_cast<int>(b);
+    return einst_[i].umgehen ? 0.0f : static_cast<float>(det_[i].anhebung_db());
+}
+
+float MultibandKompressor::groesste_aenderung_db(Band b) {
+    const int i = static_cast<int>(b);
+    const float g = aenderung_[i];
+    aenderung_[i] = 0.0f;
     return g;
 }
 

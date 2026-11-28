@@ -1,8 +1,10 @@
 // C interface to the native saturation insert (Rust saett_dsp via djk/instruments/reverb_ffi, same libhall_ffi.a as reverb, compressor and EQ).
-// neu allocates (outside the audio callback); block, setze, leeren, latenz allocate nothing. block works in place.
-// Latency is a whole number of samples: 69 at 44.1/48 kHz (0 from 88 kHz, no oversampling), independent of mix (the dry line
-// is delayed by the same amount). The wet path has an additional fractional offset from the antiderivative antialiasing
-// (about 0.25 sample with oversampling, 0.5 without); whole-sample delay compensation cannot remove it.
+// neu / neu_pool allocate (outside the audio callback); block, setze, leeren, latenz allocate nothing. block works in place.
+// neu is the 2x object of the VST; neu_pool is the arrangement's object (strand 13): soft and hard clip at 8x, tanh as in neu.
+// Latency is a whole number of samples, the same for every curve: neu 69 at 44.1/48 kHz, neu_pool 80 (saett_dsp::LATENZ_POOL);
+// 0 from 88 kHz (no oversampling). Independent of mix (the dry line is delayed by the same amount). The wet path has an
+// additional fractional offset from the antiderivative antialiasing (0.25 sample at 2x, 1/16 at 8x, 0.5 without);
+// whole-sample delay compensation cannot remove it.
 // neu() starts with drive +12 dB, output -6 dB, mix 1: it saturates before any setze. neu returns null for fs <= 0 or not finite.
 // The ranges of the user-facing controls are to be enforced by the controller-table rows added in T12; until then the
 // caller must clamp. +-60 dB in setze only guards against overflow. If a panic is caught inside block, the signal is untouched only when it came before the first sample.
@@ -13,12 +15,15 @@
 extern "C" {
 struct CypherSaett;
 CypherSaett* cypher_saett_neu(double fs);
+CypherSaett* cypher_saett_neu_pool(double fs);
 void cypher_saett_frei(CypherSaett* h);
 // drive_db / ausgang_db limited to +-60 dB, mix 0..1; a non-finite value ignores the whole call
 void cypher_saett_setze(CypherSaett* h, double drive_db, double ausgang_db, double mix);
 // curve 0 tanh, 1 soft clip, 2 hard clip; ceiling dBFS clamped -24..0; non-finite ceiling or curve > 2 ignores the call.
 // Defaults tanh / 0 dB are bit-equal to the plain saturation. A new curve cross-fades over 10 ms. Keeps drive, output, mix.
 void cypher_saett_setze_form(CypherSaett* h, uint8_t kurve, double decke_db);
+// knee of the hard curve in dB, clamped 0..12, smoothed; 0 (default) = plain hard clip; non-finite ignores the call
+void cypher_saett_setze_knie(CypherSaett* h, double knie_db);
 // dB the driven signal went over the ceiling since the last call (0 if never); reads and resets
 float cypher_saett_clip_db(CypherSaett* h);
 void cypher_saett_leeren(CypherSaett* h);

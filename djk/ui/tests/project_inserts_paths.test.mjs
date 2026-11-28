@@ -18,7 +18,7 @@ const N = (art) => A[art].instanzen;   // pool size of a kind
 const MEHR_SPUREN = (MAX_SPUREN - 32) * (4 + 1 + EQ_BAENDER.length + FX_NUMMERN.length + MAX_RETURNS);
 const INS_ZEILEN = INSERT_PFADE.filter((p) => p.startsWith('ins/')).length;   // every ins row of every pool slot, from the generated vocabulary
 
-const KOMP = ['schwelle', 'ratio', 'knie', 'attack', 'release', 'makeup', 'mix', 'schp'];
+const KOMP = A.komp.parameter.map((q) => q.name).filter((x) => x !== 'an' && x !== 'sc');   // the values set before the switch
 const spur = (name, ...ziele) => ({ spur: { name, fahrten: ziele.map((ziel, i) => ({ ziel, ab_takt: 1 + 2 * i, takte: 1, nach: -6 })) } });
 const lauf = (p, b) => fuehreListeAus(p, b, { quelle: 'andreas' }).projekt;
 
@@ -67,7 +67,7 @@ test('server.insert_409 negative control: outside the vocabulary stays 400 pfad,
 // ---- export render ---------------------------------------------------------------------------------------------------------------------------
 test('render.routing_inserts: routingRegler carries the values of every stage (track, group, return, master), the bypass switch last, the key as a track number', () => {
   const p = mitKette(), r = routingRegler(p);
-  assert.equal(ins(r).length, 4 * 10, 'four stages with ten rows each');
+  assert.equal(ins(r).length, 4 * A.komp.parameter.length, 'four stages with all compressor rows of insert_module.json');
   assert.equal(r['ins/komp/1/schwelle'], -30); assert.equal(r['ins/komp/1/ratio'], 8); assert.equal(r['ins/komp/1/sc'], 2);
   assert.equal(r['ins/komp/3/makeup'], 3, 'the return stage');
   assert.equal(r['ins/komp/2/schwelle'], -18, 'defaults of the group stage');
@@ -90,7 +90,7 @@ test('render.routing_inserts: bypassed stage keeps its values with an = 0; a pro
   let q = lauf(ohne, [{ befehl: 'spur_neu', art: 'audio' }, { befehl: 'return_neu' }]);
   assert.equal(ins(routingRegler(q)).length, 0, 'returns without inserts: no insert row');
   q = lauf(q, [{ befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp' }]);
-  assert.equal(ins(routingRegler(lauf(neuesProjekt('M'), [{ befehl: 'spur_neu', art: 'audio' }, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp' }]))).length, 10,
+  assert.equal(ins(routingRegler(lauf(neuesProjekt('M'), [{ befehl: 'spur_neu', art: 'audio' }, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp' }]))).length, 12,
     'inserts without any return are set as well (the early return of the send block does not hide them)');
 });
 
@@ -104,7 +104,7 @@ test('render.routing_inserts: the render of ONE track carries its chain, its gro
   const slotS2 = p.spuren.find((s) => s.id === 's2').inserts[0].slot;
   assert.deepEqual(slotsVon(routingRegler(p, { nur: s2 })), [2, 4, slotS2].sort((a, b) => a - b), 's2: own stage, its group (2), the master (4)');
   assert.equal(ins(routingRegler(p, { trocken: true })).length, 0, 'the dry merge render has no inserts (merge_inserts refuses a chain, groups are neutral)');
-  assert.equal(ins(reglerEinzeln(s1, p)).length, 30, 'reglerEinzeln of the export of one track: the same set');
+  assert.equal(ins(reglerEinzeln(s1, p)).length, 36, 'reglerEinzeln of the export of one track: the same set');
 });
 
 test('render.routing_inserts: the render of ONE track carries the stage of a return fed only through the group (send on the group)', () => {

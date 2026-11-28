@@ -41,9 +41,19 @@ TAKTE = 8
 
 def code_zahl(quelle=None):
     """Tools in hand.ts: one entry per line that starts with `  { name: '` (the counting rule of werkzeugzahl.mjs)."""
-    quelle = quelle or os.path.join(L.DJK, "hand", "hand.ts")
-    with open(quelle, encoding="utf-8") as f:
-        return sum(1 for z in f.read().split("\n") if z.startswith("  { name: '"))
+    if quelle is None:   # hand.ts plus the modules split off it (header "Moved unchanged out of hand.ts")
+        ordner = os.path.join(L.DJK, "hand")
+        dateien = [os.path.join(ordner, "hand.ts")]
+        for n in sorted(os.listdir(ordner)):
+            if n.endswith(".ts") and n != "hand.ts" and "Moved unchanged out of hand.ts" in open(os.path.join(ordner, n), encoding="utf-8").read(600):
+                dateien.append(os.path.join(ordner, n))
+    else:
+        dateien = [quelle]
+    zahl = 0
+    for d in dateien:
+        with open(d, encoding="utf-8") as f:
+            zahl += sum(1 for z in f.read().split("\n") if z.startswith("  { name: '"))
+    return zahl
 
 
 def live_laut(url):

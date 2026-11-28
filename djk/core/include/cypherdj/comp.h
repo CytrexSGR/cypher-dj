@@ -26,6 +26,7 @@ class Komp {
     cypher_komp_block_sc(h_, l, r, kl, kr, static_cast<size_t>(n));
   }
   void setze(const CypherKompEinstellung& e) { cypher_komp_setze(h_, e); }
+  void setze_charakter(bool glue, bool auto_release) { cypher_komp_setze_charakter(h_, glue ? 1 : 0, auto_release ? 1 : 0); }
   void leeren() { cypher_komp_leeren(h_); }
   float gr_db() const { return static_cast<float>(cypher_komp_gr_db(h_)); }
  private:

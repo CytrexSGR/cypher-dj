@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { starteSeite } from '../check/page_mock.mjs';
+import { pinsSchreiben, pinText } from './support/pins.mjs';
 
 const CHROME = fs.existsSync('/usr/bin/google-chrome');
 const GOLDEN = new URL('./support/gruppen_kopf_golden.json', import.meta.url);
@@ -33,9 +34,9 @@ const klickMit = (s, sel, mod = {}) => s.w(`document.querySelector(${JSON.string
 test('group head (flat project): the exact markup of the head row is pinned (golden)', opt, async (t) => {
   const s = await seite(t, flach());
   const html = await s.w(`[...document.querySelectorAll('.p-arr-gruppe')].map((e) => e.outerHTML)`);
-  if (process.env.GOLDEN_SCHREIBEN) fs.writeFileSync(GOLDEN, JSON.stringify(html, null, 1));
+  if (pinsSchreiben()) fs.writeFileSync(GOLDEN, JSON.stringify(html, null, 1));
   assert.equal(html.length, 1);
-  assert.deepEqual(html, JSON.parse(fs.readFileSync(GOLDEN, 'utf8')));
+  assert.deepEqual(html, JSON.parse(fs.readFileSync(GOLDEN, 'utf8')), pinText('group head markup differs from support/gruppen_kopf_golden.json'));
   assert.equal(await s.w(`document.querySelector('.p-arr-gruppe').classList.contains('p-arr-gruppe--tief')`), false, 'a top-level head has no depth class');
 });
 

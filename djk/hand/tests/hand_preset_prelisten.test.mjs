@@ -14,6 +14,7 @@ import { json, postAbgewiesen } from '../../ui/http/transport.ts';
 import { presetsBereich } from '../../ui/presets/area.ts';
 import { PresetVorhoerFehler } from '../../ui/presets/prelisten.ts';
 import { VorhoerFehler } from '../../ui/prelisten.ts';
+import { handQuelle } from './support/hand_source.mjs';
 
 const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'hand.ts');
 
@@ -47,7 +48,7 @@ test('the tool is listed with an object schema and the tools/list count equals t
   const w = tools.find((x) => x.name === 'preset_vorhoeren');
   assert.ok(w); assert.equal(w.inputSchema.type, 'object'); assert.deepEqual(w.inputSchema.required, ['id']);
   assert.match(w.description, /headphone/); assert.match(w.description, /kein_kopfhoerer/); assert.match(w.description, /Andreas/);
-  const quelle = fs.readFileSync(HAND, 'utf8');
+  const quelle = handQuelle();
   assert.equal(tools.length, (quelle.match(/^ {2}\{ name: '/gm) ?? []).length);
 });
 

@@ -1,6 +1,6 @@
 {
  "vertrag": "insert_module/1",
- "hinweis": "Single source of the insert vocabulary (package 1.10 slice 4). Generated from this file by djk/contract/generate_insert.py: djk/core/signalbox/src/insert_zeilen.inc and djk/ui/project/insert_schluessel.ts. Never edit those by hand. Paths are '<praefix>/<n>/<gruppe><m>/<name>' or '<praefix>/<n>/<name>', at most 31 characters. 'tabelle' says whether the kind has rows in the controller table yet (komp from 4a, eq/saett from 4b, rack from 4c, lim from the master limiter, host from plan 1.11 T4, utility from arr-fx: width, bass mono, gain and balance, 0 samples of latency, the 1.15 Utility module, bk from arr-bk: a Baukasten effect graph with the knobs k1..k64 (k9..k32 since the 32-knob widening, k33..k64 since the 64-knob widening; a graph defines the ones it uses), 0..1, default 0.5; the instance smooths a changed knob over 20 ms itself, so rampe_ms is 0). 'latenz' is the latency in samples a stage of the kind adds at 48 kHz (the delay compensation of the arrangement, slice 4b T13; pinned to cypher_*_latenz() by test_arr_pdc; host: 0 here because the latency of a foreign plugin is a property of the stage, ArrStufe::latenz from the playback file, plan 1.11 D4; bk: 0 here because the latency of a graph is a property of the stage too, measured from the instance by the loader (cypher_bk_latenz), at most 128 samples; lim: 74 samples, pinned to KanalLimiter(48000, {vorhalt 1.5 ms, sample peak}).latenz_samples()); 'instanzen' is the pool size; for eq and saett it was decided by the cost measurement (slice 4b T11, docs/architecture/stand/routing-1-10.md), not guessed; the other kinds only contribute their paths to the vocabulary. 'geraet' is the plugin parameter id in djk/ui/presets/devices.ts ('<n>' is the band number); null where the plugin has no such parameter. Units and ranges are the plugin's. Curve 'schalter' = switch, 'stufen' = integer steps, 'linear' = continuous (kurven as in controls.h KurvenTyp). gate and mb (pool kinds of plan 1.17 slice 4): source modules (Gate and MultibandCompressor of the mix tools), 0 samples of latency; the paths ins/gate/<n>/<name> and ins/mb/<n>/b<1..3>/<name>; the lim pool is 8. trans and bild (pool kinds of strand 5 slice 3): the transient shaper (dsp/transient.h, ins/trans/<n>/<name>, 32 slots) and the three-band imager (dsp/imager.h, ins/bild/<n>/<name>, 16 slots, breite_tief 0..1 so the low band can only narrow), 0 samples of latency; the saett pool is 32 since strand 5 slice 3. eq sc (strand 5 slice 4, index 85, the last row of an eq stage): the key track of the stage's dynamic bands, 0 = its own signal, 1..128 = the input of that track before any chain (as komp sc); a structural key of the chain entry wins over it.",
+ "hinweis": "Single source of the insert vocabulary (package 1.10 slice 4). Generated from this file by djk/contract/generate_insert.py: djk/core/signalbox/src/insert_zeilen.inc and djk/ui/project/insert_schluessel.ts. Never edit those by hand. Paths are '<praefix>/<n>/<gruppe><m>/<name>' or '<praefix>/<n>/<name>', at most 31 characters. 'tabelle' says whether the kind has rows in the controller table yet (komp from 4a, eq/saett from 4b, rack from 4c, lim from the master limiter, host from plan 1.11 T4, utility from arr-fx: width, bass mono, gain and balance, 0 samples of latency, the 1.15 Utility module, bk from arr-bk: a Baukasten effect graph with the knobs k1..k64 (k9..k32 since the 32-knob widening, k33..k64 since the 64-knob widening; a graph defines the ones it uses), 0..1, default 0.5; the instance smooths a changed knob over 20 ms itself, so rampe_ms is 0). 'latenz' is the latency in samples a stage of the kind adds at 48 kHz (the delay compensation of the arrangement, slice 4b T13; pinned to cypher_*_latenz() by test_arr_pdc; host: 0 here because the latency of a foreign plugin is a property of the stage, ArrStufe::latenz from the playback file, plan 1.11 D4; bk: 0 here because the latency of a graph is a property of the stage too, measured from the instance by the loader (cypher_bk_latenz), at most 128 samples; lim: 74 samples, pinned to KanalLimiter(48000, {vorhalt 1.5 ms, sample peak}).latenz_samples()); 'instanzen' is the pool size; for eq and saett it was decided by the cost measurement (slice 4b T11, docs/architecture/stand/routing-1-10.md), not guessed; the other kinds only contribute their paths to the vocabulary. 'geraet' is the plugin parameter id in djk/ui/presets/devices.ts ('<n>' is the band number); null where the plugin has no such parameter. Units and ranges are the plugin's. Curve 'schalter' = switch, 'stufen' = integer steps, 'linear' = continuous (kurven as in controls.h KurvenTyp). gate and mb (pool kinds of plan 1.17 slice 4): source modules (Gate and MultibandCompressor of the mix tools), 0 samples of latency; the paths ins/gate/<n>/<name> and ins/mb/<n>/b<1..3>/<name>; the lim pool is 8. trans and bild (pool kinds of strand 5 slice 3): the transient shaper (dsp/transient.h, ins/trans/<n>/<name>, 32 slots) and the three-band imager (dsp/imager.h, ins/bild/<n>/<name>, 16 slots, breite_tief 0..1 so the low band can only narrow), 0 samples of latency; the saett pool is 32 since strand 5 slice 3. eq sc (strand 5 slice 4, index 85, the last row of an eq stage): the key track of the stage's dynamic bands, 0 = its own signal, 1..128 = the input of that track before any chain (as komp sc); a structural key of the chain entry wins over it. komp glue and auto (strand 13 slice 1, indices 10 and 11, after sc): glue snaps ratio, attack and release to the steps of a bus compressor (in comp_dsp), auto is the program-dependent release; switches, no plugin parameter. saett (strand 13 slice 2): the pool object clips Soft and Hard at 8x (Tanh at 2x, delayed to match), so every curve has the latency 80 (saett_dsp::LATENZ_POOL; the plugin keeps 69); knie (index 6, after decke) is the knee of the Hard curve in dB, 0 = the sharp corner of before, 12 = the softest (k = min(0.75, 1 - 10^(-knie/20))); no plugin parameter.",
  "arten": [
   {
    "art": "komp",
@@ -129,6 +129,30 @@
      "rampe_ms": 0,
      "geraet": null,
      "rolle": "ins_komp_sc"
+    },
+    {
+     "name": "glue",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_komp_glue"
+    },
+    {
+     "name": "auto",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_komp_auto"
     }
    ]
   },
@@ -376,7 +400,7 @@
    "art": "saett",
    "praefix": "ins/saett",
    "instanzen": 32,
-   "latenz": 69,
+   "latenz": 80,
    "tabelle": true,
    "geraet": "saett",
    "parameter": [
@@ -451,6 +475,18 @@
      "rampe_ms": 10,
      "geraet": null,
      "rolle": "ins_saett_decke"
+    },
+    {
+     "name": "knie",
+     "einheit": "dB",
+     "min": 0,
+     "max": 12,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_saett_knie"
     }
    ]
   },
@@ -1681,6 +1717,62 @@
        "rolle": "ins_mb_b_umgehen"
       }
      ]
+    },
+    {
+     "name": "u",
+     "anzahl": 3,
+     "parameter": [
+      {
+       "name": "schwelle",
+       "einheit": "dB",
+       "min": -80,
+       "max": 0,
+       "vorgabe": -40,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": null,
+       "rolle": "ins_mb_u_schwelle"
+      },
+      {
+       "name": "ratio",
+       "einheit": "",
+       "min": 1,
+       "max": 4,
+       "vorgabe": 1,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": null,
+       "rolle": "ins_mb_u_ratio"
+      },
+      {
+       "name": "bereich",
+       "einheit": "dB",
+       "min": 0,
+       "max": 24,
+       "vorgabe": 6,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": null,
+       "rolle": "ins_mb_u_bereich"
+      }
+     ]
+    }
+   ],
+   "parameter_nach": [
+    {
+     "name": "sc",
+     "einheit": "",
+     "min": 0,
+     "max": 128,
+     "vorgabe": 0,
+     "kurve": "stufen",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_mb_sc"
     }
    ]
   },

@@ -1,7 +1,8 @@
 // Route-Golden (Plan 2026-10-15-d1-s1, Task 2; Herkunft: Erhebung u4 routen_probe.mjs, erweitert um Antwortform und fremde Herkunft).
 // Friert die Oberfläche aller Routen ein: je (Methode, Pfad, Kopf) Status, Content-Type, fehler-Feld und die Form der JSON-Antwort
 // (Schlüssel und Typen, keine Werte). Server in-process OHNE Kern und ohne Attrappe, alle Ordner in tmp, leere Bodies.
-// Vergleich gegen support/routen_golden.json; neu schreiben nur bewusst: ROUTEN_GOLDEN_SCHREIBEN=1 node --test tests/routes_golden.test.mjs
+// Vergleich gegen support/routen_golden.json; re-pin with djk/tools/pins_follow_up.sh (CYPHERDJ_PINS_SCHREIBEN=1 node --test tests/routes_golden.test.mjs; the old ROUTEN_GOLDEN_SCHREIBEN=1 works too).
+// The file also holds `tabelle`, the router table (method + pattern, in order, first match wins): server_zerlegt.test.mjs reads it from here.
 // Grenze: kein Erfolgspfad der Kern-Routen (dafür server.test.mjs und safety_net.test.mjs). /proj/* steht NICHT hier (eigener Bereich, Task 10).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +12,7 @@ import path from 'node:path';
 import { Oberflaeche } from '../server.ts';
 import { schreibeLeerenRing } from './support/ring.mjs';
 import { K, TEST_INSTANZ, belegeTestInstanz } from './support/instance.mjs';
+import { pinsSchreiben, pinText } from './support/pins.mjs';
 
 belegeTestInstanz();
 const GOLDEN = path.join(import.meta.dirname, 'support', 'routen_golden.json');
@@ -71,7 +73,9 @@ export async function probe() {
     } catch (e) { return { code: -1, fehler: String(e.name) }; } finally { clearTimeout(uhr); }
   }
   const ergebnis = [];
+  let tabelle = [];
   try {
+    tabelle = o.routen().map((r) => `${r.methode} ${r.pfad}`);
     for (const p of GET) ergebnis.push({ m: 'GET', p, ...(await ruf('GET', p)) });
     for (const p of POST) {
       ergebnis.push({ m: 'POST', p, kopf: 'json', ...(await ruf('POST', p, { 'content-type': 'application/json' }, '{}')) });
@@ -86,12 +90,12 @@ export async function probe() {
     if (altHeim === undefined) delete process.env.CYPHERDJ_HEIM; else process.env.CYPHERDJ_HEIM = altHeim;
   }
   const anKern = log.filter((z) => z.typ === 'an_kern').map((z) => z.adresse);
-  return { text: JSON.stringify({ n: ergebnis.length, ergebnis }, null, 1) + '\n', anKern };
+  return { text: JSON.stringify({ n: ergebnis.length, tabelle, ergebnis }, null, 1) + '\n', anKern };
 }
 
 test('Route-Golden: jede Route antwortet wie eingefroren (Status, Content-Type, fehler, Form); kein Befehl an den Kern', async () => {
   const { text, anKern } = await probe();
   assert.deepEqual(anKern, ['/k/tschuess'], 'die Probe sendet dem Kern nichts außer der Abmeldung beim Stoppen');
-  if (process.env.ROUTEN_GOLDEN_SCHREIBEN === '1') { fs.writeFileSync(GOLDEN, text); return; }
-  assert.equal(text, fs.readFileSync(GOLDEN, 'utf8'), 'Route-Oberfläche verändert: diff gegen support/routen_golden.json');
+  if (pinsSchreiben()) { fs.writeFileSync(GOLDEN, text); return; }
+  assert.equal(text, fs.readFileSync(GOLDEN, 'utf8'), pinText('route surface changed, diff against support/routen_golden.json'));
 });

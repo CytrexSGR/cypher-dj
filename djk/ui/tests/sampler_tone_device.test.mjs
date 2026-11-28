@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalisierePanel, pruefePanel, reglerBereiche } from '../graphs.ts';
+import { pinsSchreiben, pinText } from './support/pins.mjs';
 import { TON_KURZ_MAX, noteHz, notenName, tonGraph, tonGraphName, tonPanel } from '../sampler/tone.ts';
 
 const probe = { graph: 'ton-probe-0000-1', schnitt_id: 'probe-0000', name: 'Probe', a: 4800, b: 52800, grund: 57 };
@@ -53,9 +54,9 @@ test('a long tone name is cut to the 40 characters of a panel title', () => {
 });
 
 test('the probe graph is the fixture the block test plays', () => {
-  if (process.env.TON_PROBE_SCHREIBEN === '1') {
+  if (pinsSchreiben()) {
     fs.writeFileSync(FIXTURE, `${JSON.stringify(tonGraph(probe), null, 2)}\n`);
     return;
   }
-  assert.deepEqual(tonGraph(probe), JSON.parse(fs.readFileSync(FIXTURE, 'utf8')));
+  assert.deepEqual(tonGraph(probe), JSON.parse(fs.readFileSync(FIXTURE, 'utf8')), pinText('probe graph differs from its fixture'));
 });

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { PLUG_HOSTS, PLUG_KNOEPFE, REGLER, imBereich, kanalVon, machtLeiser, reglerInfo, SPUR_BK_SLOTS } from '../src/controls_info.ts';
 import { SCHEMA_ORDNER } from '../src/contract.ts';
+import { insZeilen, zeilen } from './support/insert_source.ts';
 
 const muster = new RegExp(JSON.parse(fs.readFileSync(path.join(SCHEMA_ORDNER, 'defs.schema.json'), 'utf8'))
   .$defs.regler_pfad.pattern);
@@ -66,18 +67,18 @@ test('1.15 A2: the table holds exactly the 201 tool paths of section 3 (containe
   assert.deepEqual(werkzeug.sort(), [...soll].sort());
   // 909 listed rows before A2 (measured at b257b17c; the controller table has 4 more unlisted ones), + 120 insert rows ins/komp/1..12/* (slice 4a T6) + 59 ins/eq/1/* + 4 ins/saett/1/* (slice 4b T12) + 59 ins/eq/2/* (eq pool 2, 2026-11-06) + 3 ins/lim/1/* (master limiter kind; the tool-row filter below skips ins/ because bus lim rows share the segment)
   // 730 = 120 komp + 8 x 59 eq + 4 x 4 saett + 2 x 3 lim + 4 host + 8 x 5 utility (arr-fx) + 8 x 65 bk (arr-bk, an + k1..k64 since the 64-knob widening; 8 x 33 at 32 knobs, 8 x 9 before); the pin said 245 and ignored the 4 host rows, so it was already red on main (249 rows)
-  // strand 5 (dynamics): ins/ rows by kind = komp 160 x 10 + eq 160 x 86 (EQ Pro + key row sc) + saett 32 x 6 + lim 8 x 3 + host 8 + utility 8 x 5 + bk 8 x 65 + gate 16 x 8 + mb 8 x 24 + trans 32 x 6 + bild 16 x 7 (16768; the per-kind pins follow)
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/')).length, 160 * 10 + 160 * 86 + 32 * 6 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + 16 * 8 + 8 * 24 + 32 * 6 + 16 * 7);
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/eq/')).length, 160 * 86);   // strand 1 slice 3b: 96 -> 160; strand 5: EQ Pro 59 -> 85 parameters, slice 4: + key row sc
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/saett/')).length, 32 * 6);   // strand 5: 4 -> 32 instances, 6 parameters (an, drive, out, mix, kurve, decke)
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/trans/')).length, 32 * 6);   // strand 5 slice 3: transient shaper
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bild/')).length, 16 * 7);   // strand 5 slice 3: imager
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/lim/')).length, 8 * 3);   // strand 1 slice 4: 2 -> 8
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/gate/')).length, 16 * 8);   // strand 1 slice 4
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/mb/')).length, 8 * 24);   // strand 1 slice 4: an, grenze_tief, grenze_hoch + 3 bands x 7
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/utility/')).length, 8 * 5);   // arr-fx slice 1
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bk/')).length, 8 * 65);   // arr-bk slice 3 + 64-knob widening: an and k1..k64 per instance
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('rack/')).length, 48);   // slice 4c: 12 racks x 4 macro rows
+  // strand 5 (dynamics): ins/ rows by kind = komp 160 x 12 (glue, auto since strand 13 slice 1) + eq 160 x 86 (EQ Pro + key row sc) + saett 32 x 7 (knie since strand 13 slice 2) + lim 8 x 3 + host 8 + utility 8 x 5 + bk 8 x 65 + gate 16 x 8 + mb 8 x 24 + trans 32 x 6 + bild 16 x 7 (16768; the per-kind pins follow)
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/')).length, insZeilen());   // rows = pool size x rows per instance, from insert_module.json
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/eq/')).length, zeilen('eq'));
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/saett/')).length, zeilen('saett'));
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/trans/')).length, zeilen('trans'));   // strand 5 slice 3: transient shaper
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bild/')).length, zeilen('bild'));   // strand 5 slice 3: imager
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/lim/')).length, zeilen('lim'));   // strand 1 slice 4: 2 -> 8
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/gate/')).length, zeilen('gate'));   // strand 1 slice 4
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/mb/')).length, zeilen('mb'));
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/utility/')).length, zeilen('utility'));   // arr-fx slice 1
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bk/')).length, zeilen('bk'));
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('rack/')).length, zeilen('rack'));   // slice 4c: 12 racks x 4 macro rows
   // container core: 4048 rows of the 13-channel table - 432 deck/* rows - 688 erz/* rows + 224 deck/* rows (2 containers x 104 + 16 stem rows)
   // + 712 erz/* alias rows (8 streams x (25 suffixes + 64 bk)) + 1024 strom/1..16/bk/1..64 rows (+ 512 spur/9..16/bk/1..64 rows since 2026-11-21, the core slots 8 -> 16); pad/* (208) and bus/* (196) are unchanged
   // + 396 rows of the K7/K6 growth: spur/1..32/pfl, trim, kill/* (32 x 5 = 160), sends 5..8 of the 32 tracks (128), of the 16 groups (64) and the return strips ret/5..8 (4 x 11 = 44)
@@ -88,7 +89,7 @@ test('1.15 A2: the table holds exactly the 201 tool paths of section 3 (containe
   // tracks 33..128 (96 x 24); + 128 rows: strand 2 slice 2, plug/<h>/k<m> (8 x 16)
   // strand 5: the 4048 of the 13-channel table held 1178 ins/ rows (the first 8 compressors and EQs, 4 saturators, ...); every ins/ row is now counted
   // by kind in one sum (INS_ZEILEN, pinned per kind above), so the base is taken without them
-  const INS_ZEILEN = 160 * 10 + 160 * 86 + 32 * 6 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + 16 * 8 + 8 * 24 + 32 * 6 + 16 * 7;
+  const INS_ZEILEN = insZeilen();
   assert.equal(REGLER.size, 4048 - 1178 + 512 - 432 - 688 + 224 + 712 + 1024 + 160 + 128 + 64 + 44 + 32 * 3 + 96 * 24 + 8 * 16 + INS_ZEILEN);
   for (const p of soll) assert.equal(muster.test(p), true, `schema takes ${p}`);
 });

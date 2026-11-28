@@ -72,6 +72,22 @@
 .fa-komp-meter { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 0; }
 .fa-komp-meter-titel { font-size: 8.5px; font-weight: 600; letter-spacing: .18em; color: var(--dim); }
 .fa-komp-meter .fa-meter { flex: 1 1 auto; min-height: 0; }
+/* strand 13: the glue mode of the compressor face: title, stepped selectors, AUTO, STYLE and the needle meter */
+.fa-komp-glue { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 10px; }
+.fa-komp-glue[hidden], .fa-komp-nadel[hidden], .fa-komp-meter[hidden] { display: none; }
+.fa-komp-titel { flex: 1 0 100%; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--fa); }
+.fa-glue-feld { display: flex; flex-direction: column; gap: 2px; font-size: 8.5px; font-weight: 600; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
+.fa-glue-wahl, .fa-glue-stil { font-size: 11px; }
+.fa-glue-auto { font-size: 10px; font-weight: 700; letter-spacing: .1em; padding: 3px 9px; border: 1px solid var(--line); border-radius: 4px; background: #0e0f12; color: var(--dim); cursor: pointer; }
+.fa-glue-auto.an { color: #0e0f12; background: var(--fa); border-color: var(--fa); }
+.fa-komp-nadel { display: flex; align-items: center; }
+.fa-glue-nadel { display: flex; flex-direction: column; align-items: center; }
+.fa-glue-bogen { stroke: #566; stroke-width: 1.5; }
+.fa-glue-strich { stroke: #566; stroke-width: 1; }
+.fa-glue-zahl { fill: var(--dim); font-size: 7px; }
+.fa-glue-zeiger { stroke: var(--fa); stroke-width: 2; stroke-linecap: round; transition: transform .08s linear; }
+.fa-glue-nabe { fill: var(--fa); }
+.fa-glue-text { font-size: 10px; color: var(--dim); }
 .fa-meter-bahn { background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), #2a2d36 calc(25% - 1px), #2a2d36 25%); }
 .fa-komp .fa-kurve, .fa-komp .fa-knie, .fa-komp .fa-schwelle, .fa-komp .fa-knick, .fa-komp .fa-marke { transition: opacity .15s; }
 .fa-komp.fa-aus .fa-kurve { stroke: #6b6f7c; filter: none; opacity: .7; }
@@ -217,3 +233,21 @@ circle.fa-hall-t0 { fill: var(--ak-blau); } circle.fa-hall-t1 { fill: var(--fa);
 .fa-bild-zeile { display: grid; grid-template-columns: 52px 1fr 56px; align-items: center; gap: 8px; }
 .fa-bild-schieber { width: 100%; accent-color: var(--fa); }
 .fa-bild-wert { font-variant-numeric: tabular-nums; text-align: right; }
+
+/* strand 13 slice 3: the multiband (band strip with two crossover handles, one column per band with its GR bar and knobs) */
+.fa-mb { display: flex; flex-direction: column; gap: 8px; }
+.fa-mb-streifen { align-self: center; width: min(100%, 340px); min-width: 0; }
+.fa-mb .fa-mb-schwellen { fill: none; stroke: var(--fa); }
+.fa-mb-grenze { stroke: var(--fa); stroke-dasharray: 3 3; opacity: .8; }
+.fa-mb-griff { fill: var(--fa); cursor: ew-resize; touch-action: none; }
+.fa-mb-baender { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.fa-mb-band { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.fa-mb-gr { height: 48px; display: flex; }
+.fa-mb-gr-stufe { opacity: .45; }
+.fa-mb-gr-zwei { gap: 4px; }
+.fa-mb-gr-zwei .fa-meter:last-child { --fa: var(--ak-tuerkis); }   /* the lift bar of an upward band */
+.fa-mb-band.fa-aus-band .fa-mb-platte, .fa-mb-band.fa-aus-band .fa-mb-gr { opacity: .4; }
+.fa-mb.fa-aus .fa-mb-schwellen { stroke: #6b6f7c; }
+.fa-mb.fa-aus .fa-mb-griff { fill: #6b6f7c; }
+.fa-mb.fa-aus .fa-mb-baender, .fa-mb.fa-aus .fa-mb-grenzen { opacity: .5; }
+.p-face:has(.fa-mb) { width: min(760px, calc(100vw - 32px)); }

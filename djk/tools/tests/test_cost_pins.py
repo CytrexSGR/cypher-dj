@@ -26,9 +26,9 @@ def attrappe(tmp_path, hashes):
     return exe
 
 
-def lauf(exe, cpu, lane="arr32ins", block="256", envv="", nach="", kontrolle=0):
+def lauf(exe, cpu, lane="arr32ins", block="256", envv="", nach="", kontrolle=0, pins=PINS):
     cmd = ["cmake", f"-DEXE={exe}", f"-DLANE={lane}", f"-DBLOCK={block}", f"-DENVV={envv}", f"-DNACH={nach}",
-           f"-DKONTROLLE={kontrolle}", f"-DPINS={PINS}", "-P", str(KOSTEN / "hash_pruefen.cmake")]
+           f"-DKONTROLLE={kontrolle}", f"-DPINS={pins}", "-P", str(KOSTEN / "hash_pruefen.cmake")]
     r = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ, "KOSTEN_CPU_MODELL": cpu})
     return r.returncode, r.stdout + r.stderr
 
@@ -55,11 +55,14 @@ def test_known_host_with_its_pin_passes(tmp_path):
 
 
 def test_known_host_with_the_other_hosts_bits_fails(tmp_path):
-    p2, o2 = pin("ryzen-7800x3d", "256")
-    exe = attrappe(tmp_path, f'256) pm={p2}; out={o2};; *) pm=1; out=2;;')
-    rc, out = lauf(exe, LAPTOP)
+    # its own pins file: the real hosts may give the same bits (since strand 13 the arr32ins pins of both are equal), the mechanism is tested here
+    pins = tmp_path / "hash_pins.txt"
+    pins.write_text("host ryzen-7800x3d 7800X3D\nhost i9-13900hx i9-13900HX\n"
+                    "pin ryzen-7800x3d arr32ins 256 1111 2222\npin i9-13900hx arr32ins 256 3333 4444\n")
+    exe = attrappe(tmp_path, '256) pm=1111; out=2222;; *) pm=1; out=2;;')
+    rc, out = lauf(exe, LAPTOP, pins=pins)
     assert rc != 0 and "hash differs from the reference" in out
-    rc, out = lauf(exe, PC)
+    rc, out = lauf(exe, PC, pins=pins)
     assert rc == 0, out
 
 

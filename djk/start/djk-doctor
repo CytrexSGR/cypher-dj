@@ -222,7 +222,7 @@ def version():
             ver = str(json.load(f).get("version", "unknown")) + " (source tree)"
     fmt = "unknown"
     try:
-        with open(os.path.join(DJK, "ui", "project", "model.ts"), encoding="utf-8") as f:
+        with open(os.path.join(DJK, "ui", "project", "model_types.ts"), encoding="utf-8") as f:
             m = re.search(r"export const FORMAT = '([^']+)'", f.read())
         fmt = m.group(1) if m else fmt
     except OSError:

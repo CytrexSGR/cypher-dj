@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { handQuelle } from './support/hand_source.mjs';
 
 const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'hand.ts');
 
@@ -79,7 +80,7 @@ test('regler posts an alias path unchanged: the page server resolves it, the han
 });
 
 test('hand.ts keeps no numeric stream list of its own', () => {
-  const q = fs.readFileSync(HAND, 'utf8');
+  const q = handQuelle();
   assert.doesNotMatch(q, /\[\s*1,\s*2,\s*3,\s*5,\s*6,\s*7,\s*9,\s*10\s*\]/);
   assert.doesNotMatch(q, /STUDIO_STROEME/);
   assert.match(q, /ALLE_STROEME/);

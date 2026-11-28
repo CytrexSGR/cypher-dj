@@ -75,6 +75,6 @@ int main() {
   PRUEF(dt > -20.0);                            // the dry export is loud: silence in both runs would make the comparison pass for the wrong reason
   PRUEF(dt - dv >= 6.0);                        // the chains compress: the export with rows is at least 6 dB below the one without
   PRUEF(dp - dv >= 3.0);                        // the PM stage alone is audible in the export tap
-  PRUEF(voll.regler == trocken.regler + 40);    // the rows really arrived (4 stages x 10)
+  PRUEF(voll.regler == trocken.regler + 48);    // the rows really arrived (4 stages x 12 since the glue mode)
   PRUEF_ENDE();
 }

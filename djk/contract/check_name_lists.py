@@ -1273,7 +1273,7 @@ def _ins_vertrag(q: Quelle) -> dict[str, tuple[float, float, float]]:
         if not zeile.startswith("| `ins/"):
             continue
         z = [c.strip() for c in zeile.strip().strip("|").split("|")]
-        m = re.match(r"^`ins/(komp|eq|saett|lim|host|utility|bk|gate|mb|trans|bild)/<n>/((?:[bd](?:<m>|[1-8])/)?[a-z0-9_]+)`$", z[0]) if len(z) == 6 else None
+        m = re.match(r"^`ins/(komp|eq|saett|lim|host|utility|bk|gate|mb|trans|bild)/<n>/((?:[bdu](?:<m>|[1-8])/)?[a-z0-9_]+)`$", z[0]) if len(z) == 6 else None
         if not m:
             raise ParserFehler(f"INTERFACES §1.5: Insert-Zeile nicht lesbar: {zeile[:80]!r}")
         b = re.fullmatch(r"(?:(\S+) to (\S+)|0/1)", z[2].replace("−", "-"))
@@ -1281,7 +1281,7 @@ def _ins_vertrag(q: Quelle) -> dict[str, tuple[float, float, float]]:
             raise ParserFehler(f"INTERFACES §1.5: Bereich der Zeile {m.group(1)} nicht lesbar: {z[2]!r}")
         lo, hi = (float(b.group(1)), float(b.group(2))) if b.group(1) else (0.0, 1.0)
         werte = (lo, hi, float(z[3].replace("−", "-")))
-        namen = [m.group(2).replace("<m>", str(b)) for b in range(1, 4 if m.group(1) == "mb" else 9)] if "<m>" in m.group(2) else [m.group(2)]   # b<m>: the 8 EQ bands, the 3 multiband bands; d<m> (strand 5 slice 2): the dynamic rows of the 8 EQ bands
+        namen = [m.group(2).replace("<m>", str(b)) for b in range(1, 4 if m.group(1) == "mb" else 9)] if "<m>" in m.group(2) else [m.group(2)]   # b<m>: the 8 EQ bands, the 3 multiband bands; d<m> (strand 5 slice 2): the dynamic rows of the 8 EQ bands; u<m> (strand 13 slice 4): the upward rows of the 3 multiband bands
         for i in range(1, n[m.group(1)] + 1):
             for name in namen:
                 if f"ins/{m.group(1)}/{i}/{name}" in aus:
@@ -1326,6 +1326,7 @@ def _ins_universum(kern: dict[str, tuple[float, float, float]]) -> list[str]:
     u |= {f"ins/eq/1/b{b}/{x}" for b in (0, 9) for x in ("an", "freq")}   # band numbers just outside
     u |= {f"ins/eq/1/d{b}/{x}" for b in (0, 9) for x in ("dyn", "bereich")} | {"ins/eq/1/d1", "ins/eq/1/d1/zz", "ins/eq/1/d1/an", "ins/eq/1/b1/dyn", "ins/eq/1/d1/dyn_attack", "ins/mb/1/d1/dyn"}   # strand 5 slice 2: the dynamic EQ rows
     u |= {f"ins/mb/1/b{b}/{x}" for b in (0, 4) for x in ("schwelle", "umgehen")} | {"ins/mb/1/b1", "ins/mb/1/b1/zz", "ins/gate/1/b1/an", "ins/gate/1/sc", "ins/mb/1/sc"}
+    u |= {f"ins/mb/1/u{b}/{x}" for b in (0, 4) for x in ("schwelle", "bereich")} | {"ins/mb/1/u1", "ins/mb/1/u1/zz", "ins/mb/1/u1/knie", "ins/mb/1/b1/bereich", "ins/eq/1/u1/schwelle", "ins/mb/1/sc/x"}   # strand 13 slice 4: the upward rows
     u |= {"ins/eq/1/b1", "ins/eq/1/b1/zz", "ins/eq/1/b11/an", "ins/saett/1/b1/an", "ins/trans/1/b1/an", "ins/bild/1/b1/breite", "ins/bild/1/breite", "ins/trans/1/sc", "ins/komp/1/b1/an", "ins/rack/1/an", "komp/1/an"}
     # the rack macro family: instance numbers and macro numbers just outside, a sibling name, a suffix
     u |= {"rack/0/m1", "rack/13/m1", "rack/01/m1", "rack/1/m0", "rack/1/m5", "rack/1/m11", "rack/1/m1/x", "rack/1/m", "rack/1", "rack", "rack/1/zz", "rack/1/m1x"}

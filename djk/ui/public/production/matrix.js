@@ -24,9 +24,9 @@ export function matrixZeilen(m, stand) {
     sends: s.art === 'spur' || s.art === 'gruppe'
       ? m.returns.map((r) => ({ typ: 'send', strang_id: s.id, return_id: r.id, db: s.sends.find((x) => x.return_id === r.id)?.db ?? FADER_AUS,
         ...(sendHatLane(stand, s.id, r.id) ? { auto: true } : {}) })) : [],
-    stufen: s.stufen.filter((x) => x.art === 'komp').map((x) => {
+    stufen: s.stufen.filter((x) => x.art === 'komp' || x.art === 'eq' || x.art === 'mb').map((x) => {
       const wert = x.schluessel ? wertVon(x.schluessel.quelle, x.schluessel.nr, x.schluessel.punkt) : 'own';
-      return { typ: 'schluessel', insert_id: x.insert_id, wert, label: `Comp ${x.slot}: ${schluesselLabel(wert, projekt)}` };
+      return { typ: 'schluessel', insert_id: x.insert_id, wert, label: `${{ komp: 'Comp', eq: 'EQ', mb: 'MB' }[x.art]} ${x.slot}: ${schluesselLabel(wert, projekt)}` };
     }),
   }));
 }

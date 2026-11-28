@@ -14,14 +14,14 @@ def plan(*dateien):
 
 
 def test_cmake_header_contract_lockfile_escalate():
-    for rel in ("djk/core/CMakeLists.txt", "djk/core/src/anker.h", "djk/contract/schema/x.json", "djk/instruments/Cargo.lock",
+    for rel in ("djk/previewer/CMakeLists.txt", "djk/contract/schema/x.json", "djk/instruments/Cargo.lock",
                 "djk/ui/package.json", "djk/requirements.txt", "djk/tools/alles.sh", "djk/ui/tests/serial.txt"):
         g, suites, dateien, _ = plan(rel)
         assert g and not suites and not dateien, rel
 
 
 def test_one_escalating_file_wins_over_others():
-    g, *_ = plan("djk/hand/hand.ts", "djk/core/src/anker.h")
+    g, *_ = plan("djk/hand/hand.ts", "djk/tools/alles.sh")
     assert g
 
 
@@ -76,7 +76,7 @@ def test_docs_select_nothing():
 
 def test_contract_prose_does_not_escalate_but_a_contract_file_does():
     assert not plan("djk/contract/README.md")[0]
-    assert plan("djk/contract/auftrag.schema.json")[0]
+    assert plan("djk/contract/zz_unbekannt.xyz")[0]   # no row of VERTRAG names it
 
 
 def test_changed_quiet_page_test_goes_to_the_quiet_stage():
@@ -134,7 +134,7 @@ def test_a_mock_core_change_selects_the_tests_of_other_packages_that_import_it()
     g, suites, dateien, _ = plan("djk/contract/mock_core/osc.mjs")
     assert not g
     gewaehlt = {f for fs in dateien.values() for f in fs}
-    assert "tests/server.test.mjs" in gewaehlt   # ui/tests/server.test.mjs imports ../../contract/mock_core/osc.mjs
+    assert "tests/server_routes_inventory.test.mjs" in gewaehlt   # ui/tests/server_routes_inventory.test.mjs imports ../../contract/mock_core/osc.mjs
     assert any(k.startswith("ui-") for k in dateien)
 
 
@@ -238,3 +238,145 @@ def test_the_gate_scripts_escalate_even_with_line_reading():
     for rel in ("djk/tools/alles.sh", "djk/tools/betroffen.py", "djk/tools/quarantaene.txt"):
         g, *_ = b.plane([rel], zeilen_fn=_zeilen({rel: ["x.test.mjs"]}))
         assert g, rel
+
+
+# ---- step 7 of the CI plan: CMake and header of the core and the contract files no longer select the whole gate ----
+def gewaehlt(dateien):
+    return {f for fs in dateien.values() for f in fs}
+
+
+def test_core_cmake_and_cmake_module_select_the_core_suites_and_the_programs_tests_not_the_whole_gate():
+    for rel in ("djk/core/CMakeLists.txt", "djk/core/noten/CMakeLists.txt", "djk/core/tests/cost/hash_pruefen.cmake"):
+        g, suites, dateien, _ = plan(rel)
+        assert not g and {"core", "hand", "mock_core"} <= suites, rel
+        # a page test that starts the real cypherdj-kern (not only the render) is in: the build of every program changed
+        assert "tests/prelisten.test.mjs" in gewaehlt(dateien), rel
+        assert "tests/proj_notes_real.test.mjs" in gewaehlt(dateien), rel
+
+
+def test_cmake_outside_the_core_and_third_party_still_escalate():
+    for rel in ("djk/previewer/CMakeLists.txt", "djk/testbench/CMakeLists.txt", "third_party/x/CMakeLists.txt", "djk/third_party/y/z.cmake"):
+        assert plan(rel)[0], rel
+
+
+def test_core_header_selects_the_core_suites_and_the_code_outside_the_core_that_names_it():
+    g, suites, dateien, _ = plan("djk/core/include/cypherdj/arr_pdc.h")
+    assert not g and {"core", "hand", "mock_core"} <= suites
+    # djk/starter/tests/test_demo_build.py names arr_pdc.h, djk/ui/public/production/pdc.js too (a source: the tests that name it run)
+    assert "tests/test_demo_build.py" in dateien.get("py-starter", set())
+    g, suites, dateien, _ = plan("djk/core/signalbox/include/cypherdj/signalbox/controls.h")
+    assert not g and "core" in suites
+    assert "tests/production_device_view.test.mjs" in gewaehlt(dateien)      # names controls.h
+
+
+def test_a_header_nobody_outside_the_core_names_selects_only_the_core_side():
+    g, suites, dateien, _ = plan("djk/core/include/cypherdj/zz_kein_leser_ausserhalb.h")
+    assert not g and {"core", "hand", "mock_core"} <= suites
+
+
+def test_the_gate_and_lockfiles_still_escalate_next_to_a_core_header():
+    for rel in ("djk/tools/alles.sh", "djk/tools/ci/prepare.sh", ".anyhost/workflows/ci.yml", "djk/hand/package-lock.json", "djk/tools/betroffen.py"):
+        g, *_ = plan("djk/core/include/cypherdj/arr_pdc.h", rel)
+        assert g, rel
+
+
+def test_contract_table_rows_match_the_files_they_name():
+    assert b.vertrag_zeile("djk/contract/osc.json")[0] == {"py-contract", "mock_core"}
+    assert b.vertrag_zeile("djk/contract/schemas/defs.schema.json")[0] == {"py-contract"}
+    assert b.vertrag_zeile("djk/contract/cases/noten/gruende.json")[2] == ["cases/noten"]
+    assert b.vertrag_zeile("djk/contract/cases/arr_ki_stopp.json")[0] == {"py-contract", "mock_core"}
+    assert b.vertrag_zeile("docs/interfaces/insert_module.json")[1][0].endswith("insert_zeilen.inc")
+    assert b.vertrag_zeile("djk/contract/unbekannt.xyz") is None
+    assert not b.vertrag_datei("djk/contract/tests/test_osc.py") and not b.vertrag_datei("djk/contract/mock_core/arr.mjs")
+    assert not b.vertrag_datei("djk/contract/notes.md") and b.vertrag_datei("docs/interfaces/lesbare_namen.json")
+
+
+def test_every_contract_file_in_the_repo_is_known_or_escalates_by_name():
+    # a file of the contract folders that no row names must be a reason to escalate (never silently nothing)
+    for rel in b.schnell.git("ls-files", "--", "djk/contract", "docs/interfaces").split():
+        if b.vertrag_datei(rel) and b.vertrag_zeile(rel) is None and os.path.basename(rel) not in b.LOCK_NAMEN:
+            assert b.eskalation(rel), rel
+
+
+def test_osc_json_selects_py_contract_mock_core_core_and_the_readers_by_name():
+    g, suites, dateien, _ = plan("djk/contract/osc.json")
+    assert not g and {"py-contract", "mock_core", "core", "hand"} <= suites
+    assert "py-contract" not in dateien and "mock_core" not in dateien       # run whole instead
+    assert any(k.startswith("ui-") for k in dateien) and "conductor" in dateien
+
+
+def test_a_schema_selects_py_contract_and_its_named_readers_but_not_instruments():
+    g, suites, dateien, _ = plan("djk/contract/schemas/defs.schema.json")
+    # defs.schema.json is also read by name by the names checker, so core (its ctest) comes with py-contract
+    assert not g and suites == {"py-contract", "core"}
+    assert "instruments" not in dateien and "hand" not in suites
+    g, suites, _, _ = plan("djk/contract/schemas/auftrag.schema.json")
+    assert not g and suites == {"py-contract"}
+
+
+def test_the_noten_cases_select_py_contract_and_core_because_ctest_reads_the_folder():
+    g, suites, _, _ = plan("djk/contract/cases/noten/gruende.json")
+    assert not g and {"py-contract", "core"} <= suites
+
+
+def test_insert_module_json_selects_what_the_generator_writes_and_its_readers():
+    g, suites, dateien, _ = plan("docs/interfaces/insert_module.json")
+    assert not g and {"py-contract", "mock_core", "core", "hand"} <= suites
+    # generated djk/conductor/src/insert_controls.ts: the conductor tests that name or import it run
+    assert "conductor" in dateien
+
+
+def test_a_generator_script_selects_its_outputs_readers_too():
+    g, suites, _, _ = plan("djk/contract/generate_insert.py")
+    assert not g and {"py-contract", "mock_core", "core"} <= suites
+
+
+def test_data_only_contract_files_select_py_contract_and_nothing_wider():
+    g, suites, dateien, _ = plan("djk/contract/demos/zuordnung.json")
+    assert not g and suites == {"py-contract"} and "core" not in dateien
+
+
+def test_an_unknown_contract_file_and_an_unknown_interface_file_escalate():
+    assert plan("djk/contract/unbekannt.xyz")[0]
+    assert plan("docs/interfaces/neu_ohne_zeile.yaml")[0]
+
+
+def test_a_python_test_that_names_a_page_source_importing_a_generated_file_runs():
+    # insert_module.json -> generated ui/project/insert_key.ts <- imported by ui/project/model.ts <- named by starter/tests/test_demo.py
+    g, _, dateien, _ = plan("docs/interfaces/insert_module.json")
+    assert not g and "tests/test_demo.py" in dateien.get("py-starter", set())
+
+
+def test_a_core_pin_list_selects_the_python_test_that_reads_it_by_name():
+    g, suites, dateien, _ = plan("djk/core/tests/cost/hash_pins.txt", "djk/core/CMakeLists.txt")
+    assert not g and "core" in suites
+    assert "tests/test_cost_pins.py" in dateien.get("py-tools", set())
+
+
+def test_the_data_files_of_the_contract_escalate_when_the_gate_changes_with_them():
+    g, *_ = plan("djk/contract/osc.json", "djk/tools/alles_cargo.sh")
+    assert g
+
+
+def test_sources_read_by_name_by_the_names_checker_select_core_and_py_contract():
+    # djk/ui/server.ts and the hand mapping header are read by name (q.lies) by check_name_lists.py, with no import edge to it
+    for rel in ("djk/ui/server.ts", "djk/core/hand/src/names.cpp", "docs/architecture/INTERFACES.md", "djk/ui/public/curves.js"):
+        g, suites, _, _ = plan(rel)
+        assert g == [] and {"core", "py-contract"} <= suites, rel
+
+
+def test_the_names_checker_list_is_derived_from_its_string_literals_and_covers_glob_folders():
+    quellen = b.namenslisten_quellen()
+    assert "djk/ui/server.ts" in quellen and "djk/contract/mock_core/contract.mjs" in quellen   # q.lies and file://@@/ import
+    assert any(q == "djk/config/controller" for q in quellen)                                  # a folder read by a glob
+    assert b.namenslisten_quelle("djk/config/controller/softcontroller.json")                  # anything below a folder counts
+    assert not b.namenslisten_quelle("djk/ui/public/other_unread_file.js")
+
+
+def test_a_new_source_literal_in_the_names_checker_counts_without_a_table_edit(tmp_path, monkeypatch):
+    (tmp_path / "djk/contract").mkdir(parents=True)
+    (tmp_path / "djk/contract/check_name_lists.py").write_text('x = q.lies("djk/ui/neu_quelle.ts")\ny = "not a path"\n')
+    monkeypatch.setattr(b, "REPO", tmp_path)
+    b._namenslisten_cache.clear()
+    assert b.namenslisten_quelle("djk/ui/neu_quelle.ts") and not b.namenslisten_quelle("djk/ui/server.ts")
+    b._namenslisten_cache.clear()

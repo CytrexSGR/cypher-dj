@@ -21,147 +21,83 @@
 //   [--kern-pruefmodus an|aus]  (ohne Angabe unbekannt: gelernt aus /e/protokollfehler des Kerns auf /test/hand;
 //   aus → POST /griff 409 pruefmodus_aus, „hand input needs test mode until slice 35“, nichts an den Kern)
 // Umgebung: CYPHERDJ_INSTANZ (Z2: Ports +1000·k), OBERFLAECHE_MUTATION=riegel_aus (nur Prüfung: Ziel-Riegel aus).
-import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { spawn } from 'node:child_process';
 import http from 'node:http';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import os from 'node:os';
 import path from 'node:path';
-import { alsFloat32, TransientenLager } from './project/transients.ts';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { KernAnbindung } from '../conductor/src/core.ts';
 import { KernWeg } from './areas/proj/core_path.ts';
-import type { KernLage } from './areas/proj/state.ts';
-import { json as sendeJson, koerper as leseKoerper, postAbgewiesen, quelleAusKopf } from './http/transport.ts';
+import { json as sendeJson, koerper as leseKoerper } from './http/transport.ts';
 import { Seitenfehler } from './seitenfehler.ts';
-import { Kopplung, TABLET_PORT, baueTabletHandler, heimAdresse, type TabletHandler } from './http/coupling.ts';
-import { bremsRegel, pruefeHand, type HandAnfrage, type HandRegel, type Stufe } from './http/hand_schutz.ts';
-import { stufenRegel, kopfWert } from './http/hand_stufe.ts';
+import { Kopplung, type TabletHandler } from './http/coupling.ts';
+import { bremsRegel, type HandRegel, type Stufe } from './http/hand_schutz.ts';
+import { stufenRegel } from './http/hand_stufe.ts';
 import { eimerRegel } from './http/hand_eimer.ts';
 import { spielRegel } from './http/hand_spielregel.ts';
 import { HandSchluessel } from './http/hand_key.ts';
-import { HandLog, handLogKopf } from './http/hand_log.ts';
-import { Router, type Route, type Bereich, type BereichKontext } from './http/router.ts';
-import { projBereich, alsAntwort, type ProjOptionen } from './areas/proj/area.ts';
-import { ProjFehler } from './areas/proj/session.ts';
-import { PLATZ_TYPEN, strudelGruppe, stromSpur, platzVonGruppe, type PlatzTyp } from './project/model.ts';
-import { geraeteBereich, type GeraeteOptionen } from './areas/devices/area.ts';
-import { lernenBereich, type LernenOptionen } from './areas/learn/area.ts';
-import { controllerBereich } from './areas/controller/sequences.ts';
-import { pultBereich } from './areas/controller/pult_production.ts';
-import { neuerTastenArm } from './areas/controller/tasten.ts';
-import { hostlernenBereich } from './areas/hostlernen/area.ts';
-import { HostSpeicher } from './areas/hostlernen/store.ts';
-import { registerBereich, aktivesPult } from './areas/controller/register.ts';
-import { presetInhaltVon, presetsBereich, type PresetOptionen } from './presets/area.ts';
-import { PresetSpeicher } from './presets/store.ts';
-import { PresetVorhoerer } from './presets/prelisten.ts';
-import { kollektionenBereich, type KollektionBereichOptionen } from './collections/area.ts';
-import { tagsBereich } from './tags/area.ts';
-import { tagsHook } from './tags/hook.ts';
+import { HandLog } from './http/hand_log.ts';
+import { Router, type Route, type Bereich } from './http/router.ts';
+import { projBereich } from './areas/proj/area.ts';
 import { KollektionSpeicher } from './collections/store.ts';
-import { rangVon } from './collections/feste.ts';
-import { sucheBereich } from './areas/suche/area.ts';   // media browser B4: GET /suche
-import { baueQuellen } from './suche.ts';
-import { listeInstrumente, zeileVon as instrumentZeile } from './sampler/instrument.ts';
-import { listeSchnitte, liesSchnitt } from './sampler/schnitt.ts';
 import { ausgabeBereich } from './areas/proj/output.ts';   // Paket S3
 import { aufnahmeBereich } from './areas/proj/recording.ts';   // 1.8 Slice 1
-import { versionenBereich } from './areas/proj/versionen.ts';   // B10
-import { rettungBereich, starteRettung, gerettetListe as gerettetListeVon } from './areas/proj/recording_rettung.ts';   // B11: recovered takes
-import { stemsBereich, type StemsOptionen } from './areas/proj/stems.ts';   // 1.13 Slice 6
+import { stemsBereich } from './areas/proj/stems.ts';   // 1.13 Slice 6
 import { notenBereich } from './areas/proj/notes.ts';   // note editor (slice 1, B2)
 import { NotenRender } from './areas/proj/notes_render.ts';   // note editor (slice 1, B4)
-import { speichereModul, modulBasis } from './project/module_storage.ts';   // plan live-module task 3
-import { bibliothekBereich } from './areas/live/library.ts';   // plan live-module task 10
-import { sichereWerksProbenImStandardOrdner } from './sampler/werksproben.ts';
-import { raeumeWaisenImStandardOrdner } from './sampler/waisen.ts';
-import { projektWurzelVorgabe, Projekte } from './project/storage.ts';
-import { echteQuellen, liesProjektDatei } from './tags/bezuege.ts';
-import { samplerBereich, schnittKurz } from './areas/sampler/area.ts';   // sampler A1 task 4
-import { legeKitAusAudio } from './sampler/kit.ts';
-import { wavKopf } from './project/recording.ts';
-import { samplerKitBereich } from './areas/sampler/kit_routes.ts';   // sampler B task 2
-import { portabelBereich } from './areas/proj/portabel_routes.ts';
-import { kitsBereich } from './areas/kits/area.ts';   // browser plan 5
-import { mitschnittBereich } from './areas/mitschnitt/area.ts';   // journey tours task 2
-import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
-import { loopdeckBereich } from './areas/live/loopdeck.ts';
-import { sessionBereich } from './areas/live/session.ts';
-import { loopsetsBereich } from './areas/live/loopsets.ts';
-import { leseBusRing, leseBusRingSeit, messeLive } from './project/sound_live.ts';
 import { MasterPegel } from './project/master_level.ts';
-import { LIVE_VORLAUF_FRAMES, LIVE_LAUTHEIT_FRAMES } from './project/sound_contract.ts';
-import { tonartQuelle } from './areas/live/key.ts';
-import { LiveHarmonie, HarmonieFehler, type Takte } from './areas/live/harmonie.ts';   // strand 7 task 2.3: live harmony lane
-import { renderPegelMesser } from './areas/live/level.ts';   // plan live-module task 2
-import { pluginsBereich } from './areas/plugins/area.ts';   // 1.11 task 10
-import { PluginIndex, type ScanBefehl } from './plugins/index.ts';
+import { LiveHarmonie } from './areas/live/harmonie.ts';   // strand 7 task 2.3: live harmony lane
 import type { Dekodiert, Felder } from '../conductor/src/addresses.ts';
-import { ZIELE, ZIEL_KURVE, ZIEL_KURVEN } from './public/curves.js';
+import { ZIEL_KURVEN } from './public/curves.js';
 
 const TASTEN = ['annehmen', 'verwerfen', 'stopp', 'freigabe'];
-import { inArbeitsbestand, KopieFehler, raeumeAuf } from './working_inventory.ts';
 import { HAND_PRUEFMODUS_TEXT } from './public/messages.js';
-import { leseLoops, LOOP_NAME, schreibeLoopAusFassung } from './loops.ts';
-import { beatsVon, importiereLoop, loopNameVon, findeImport, raeumeImportReste, LoopImportFehler, type ImportOptionen } from './loop_import.ts';
-import { WelleCache, WelleFehler, loopQuelle, schnittQuelle, fassungQuelle, dateiQuelle } from './wave_cache.ts';
-import { GRUND_TEXT } from './http/reasons.ts';
-import { kompiliereBogen } from './bogen.ts';
-import { OEFFENTLICH, REPO, REPO_PFADE, instanz, ports, shmOrdner, rasterOrdnerVorgabe, hotcueOrdnerVorgabe, huellenVorgabe, musterOrdnerVorgabe,
-  wirtOrdnerVorgabe, baukastenOrdnerVorgabe, kitsOrdnerVorgabe, zusatzKit, strudelPakete, loopOrdnerVorgabe, welleCacheVorgabe, arbeitsbestandVorgabe,
-  analyseVorgabe, ablageOrdner, importeOrdnerVorgabe, mitschnittOrdnerVorgabe, setmitschnittProgramm, notenProgramm, katalogUmgebung, vorhoerCacheVorgabe } from './paths.ts';
-import { WerkstattAnalyse } from './areas/proj/analysis.ts';
-import { tempoRampe, vorlaufBeats } from './tempo_ramp.ts';
-import { takteProLive } from './project/taktart_live.ts';
-import { veroeffentlicheTaktart } from './areas/proj/taktart_output.ts';
-import { RASTER_WAHL, abBeat, sprungDelta, loopStart, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, type Hotcue, type Fassung, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen, rasterErbe, einsNachFix, einsZeile, haengeKorrekturAn, letzteEinsZeile, hatHandEins, hotcuesErbe } from './deck_operation.ts';
+import { WelleCache } from './wave_cache.ts';
+import { REPO, REPO_PFADE, instanz, ports, shmOrdner, musterOrdnerVorgabe, loopOrdnerVorgabe, welleCacheVorgabe, arbeitsbestandVorgabe, ablageOrdner } from './paths.ts';
+import { sprungDelta, type Fassung, rasterErbe } from './deck_operation.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/loops)
-import { loopZuKlang } from '../loops/kit_write.mjs';
-import { AB, abRaster, PFAD, oeffnet, kanalOffen, platzStill, containerFrei, containerVonPfad, FEHL_STATUS, ersterFreierBeat } from './hand_operation.ts';
-import { loeseAlias, rueckAlias, istStromZeile, type AliasErgebnis } from './stream_alias.ts';
-import { Sammlungen, SammlungFehler, uebersicht } from './collection.ts';
-import { MusterBibliothek, MusterFehler, type MusterEintrag } from './pattern_library.ts';
-import { suchTerme } from './search_text.ts';
-import { Katalog, KatalogFehler, KATALOG_TYPEN, SORT_VORGABE, SEITE_VORGABE, SEITE_MAX, katalogVorgabe, type Typ, type Zeile, type Filter } from './catalog.ts';
-import { Erreichbarkeit, ERREICHBAR_TTL_MS, quellenLage } from './erreichbar.ts';   // media browser slice 1
+import { kanalOffen } from './hand_operation.ts';
+import { rueckAlias } from './stream_alias.ts';
+import { Sammlungen, SammlungFehler } from './collection.ts';
+import { MusterBibliothek } from './pattern_library.ts';
+import { Katalog, KatalogFehler, katalogVorgabe, type Typ, type Zeile, type Filter } from './catalog.ts';
+import { Erreichbarkeit } from './erreichbar.ts';   // media browser slice 1
 import { Quellen } from './sources.ts';   // storage layout A4
-import { quellenBereich } from './areas/quellen/area.ts';
-import { importeBereich } from './areas/importe/area.ts';
-import { bibliothekBereich as katalogBereich } from './areas/bibliothek/area.ts';
-import { KatalogJob, katalogNachImport, pruefeKatalogBeiStart } from './catalog_job.ts';
-import { ImportDienst, erlaubteWurzeln } from './importe.ts';
+import { KatalogJob } from './catalog_job.ts';
+import { ImportDienst } from './importe.ts';
 import { Einsammler } from './project/einsammeln.ts';   // storage layout A5
-import { baueNachExport } from './project/exporte.ts';
-import { einsammelnBereich } from './areas/proj/einsammeln.ts';
-import { dateienBereich } from './areas/proj/files.ts';   // browser plan 2
-import { leseWurzeln } from './sampler/file.ts';
-import { vorbereitQuelle } from './vorbereit_source.ts';
-import { Vorhoeren, VorhoerFehler, kernNurCueVorgabe, vorhoeerKlientVorgabe } from './prelisten.ts';
-import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer, mediathekVorgabe, bestandIds, parseBpm, parseLimit } from './media_library.ts';
-import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf, stromVonZiel, faelligeMuster, SPUR_NAME, STROM_ZIEL, MAX_TAKT, MAX_TEILE, type MusterPlan, type Fahrt } from './track.ts';
-import { SZENE_NAME, SZENE_MAX_TAKTE, AUTO_ROTIERT, istAutomatisch, reglerFuerSzene, schreibeSzene, schreibeAutomatisch, allesStill, leseSzene, szeneDa, loescheSzene, listeSzenen, planeLaden, planeGraphen, type Szene, type SzeneKlang, type SzeneSpur } from './szene.ts';   // strand 11 slice 5
-import { AUFBAU_NAME, aufbauBlock, aufbauWarnung, aufbauDa, schreibeAufbau, leseAufbau, listeAufbauten, loescheAufbau, aufbauZumLaden, type Aufbau } from './setup.ts';   // strand 11 slice 7 (7a)
-import { aufbauOrdnerVorgabe } from './paths.ts';
-import { reglerInfo } from '../conductor/src/controls_info.ts';
-import { planeDurchlauf, MAX_SCHLEIFE_TAKTE, type Spur } from './track.ts';   // 1.12 S7 (M13): track band loop
+import { Vorhoeren, kernNurCueVorgabe, vorhoeerKlientVorgabe } from './prelisten.ts';
+import { Mediathek, Vorbereiter, mediathekVorgabe } from './media_library.ts';
+import { type Fahrt } from './track.ts';
 import { leseAusgang } from './output.ts';
-import { OhrLeser, OSZI_KANAELE, oszi, hoerAntwort, hoerLage, partnerVon, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ear.ts';
-import { seqGruppe } from './project/seq.ts';
+import { OhrLeser, K as OHR_K, Hoerscheinstelle, type Hoerschein } from './ear.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/generator); muster_stand lädt Strudel NICHT (Plan-Review M3)
 import { PegelPuffer } from './level_buffer.ts';
-import { leseMusterStand, setzeAutonom, leseLebt, leseVersatz } from '../generator/src/pattern_state.mjs';
-import { ALLE_STROEME, istBkStrom, stromVonKanal } from '../contract/streams.ts';   // S18: stream <-> channel table
-import { PULT_ALIAS_STROEME, pultContainerPfad } from '../contract/pult.ts';
-import { geraetePanel, RB338_PARAM_NAMEN } from './devices_parameter.ts';
-import { listeGraphen, graphenOrdner, findeGraph, graphHash, ladePanel, reglerVonGraph, vorgabenVon, graphenNachNeustart, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE, EFFEKT_KANAELE } from './graphs.ts';   // Baukasten S12
-import { bkDefVonId } from './project/modular.ts';   // t_e998388c: project channels are left to the project restore
+import { leseLebt } from '../generator/src/pattern_state.mjs';
+import { ALLE_STROEME } from '../contract/streams.ts';   // S18: stream <-> channel table
+import { pultContainerPfad } from '../contract/pult.ts';
+import { graphenNachNeustart } from './graphs.ts';   // Baukasten S12
 
-import { NEUSTART_PLAN_VERSPAETUNG_MS, NEUSTART_FRISCH_FRAMES } from './server_kopf.ts';
-import { KLANG_ERR_MAX, handOrdnerVon, handLogOrdnerVon, kopplungPfadVon, pythonVorgabe, ueberProjekt, ueberProjektText, modulBasisVon, STROM_MAX_BYTES, STRUDEL_ZEITLIMIT_MS, SPEKTRUM_QUELLEN, KLANG_GRUPPEN, KLANG_AUS_MAX, GRAPH_ABGELEHNT, DROSSEL_MS, INS_GR_FRIST_MS, DURCHREICHEN, leseBestand, TYPEN, VORLAUF_SCHLEIFE_BEATS, schleifeAusDatei, kompAbweichend, OFFENE_DECKS, istOffenesDeck, WERKZEUG_PFAD, werkzeugAbweichend, bkAbweichend, LAGE_KANALZUG, LAGE_SEND, LAGE_ABWEICHEND, leseNeustartStand, leseOffenesProjekt, NEUSTART_STAND_ADRESSEN, CONTAINER_ART, NEUSTART_STAND_TOLERANZ_MS, systemstartMs, type NeustartStand, type NeustartPlan } from './server_kopf.ts';
-import type { ServerOptionen, Pruefmodus, Eintrag, SpurLauf, SchleifenStand } from './server_kopf.ts';
+import { handOrdnerVon, handLogOrdnerVon, kopplungPfadVon, pythonVorgabe, STROM_MAX_BYTES, DROSSEL_MS, INS_GR_FRIST_MS, DURCHREICHEN, leseBestand, kompAbweichend, OFFENE_DECKS, istOffenesDeck, WERKZEUG_PFAD, werkzeugAbweichend, bkAbweichend, LAGE_KANALZUG, LAGE_SEND, LAGE_ABWEICHEND, NEUSTART_STAND_ADRESSEN, CONTAINER_ART, type NeustartStand } from './server_kopf.ts';
+import type { ServerOptionen, Pruefmodus, SpurLauf } from './server_kopf.ts';
+import * as ST from './areas/bibliothek/browse.ts';
+import * as SL from './areas/spur/run.ts';
+import * as SZ from './areas/spur/szene.ts';
+import * as KL from './areas/spur/sound.ts';
+import * as SC from './areas/spur/schleifen.ts';
+import * as DK from './areas/live/deck.ts';
+import * as GF from './areas/live/graph_fx.ts';
+import * as NS from './areas/live/restart.ts';
+import * as SD from './areas/live/strudel.ts';
+import * as RS from './areas/live/grid.ts';
+import * as RG from './areas/live/controls.ts';
+import * as WI from './areas/live/instrument_host.ts';
+import * as LW from './areas/live/loop_wave.ts';
+import * as LB from './areas/server/lebenslauf.ts';
+import * as AN from './areas/server/anfrage.ts';
+import * as KX from './areas/server/context.ts';
+import * as BE from './areas/server/areas.ts';
 export { hauptCheckout, pythonVorgabe, INS_GR_FRIST_MS, leseBestand, istOffenesDeck } from './server_kopf.ts';
 export type { TabletOptionen, ServerOptionen, Pruefmodus } from './server_kopf.ts';
 
@@ -218,240 +154,29 @@ export class Oberflaeche {
   // Plan Grid (D5): je Deck der zuletzt an den Kern geschickte Versatz, mit dem Schlüssel der Fassung
   private readonly rasterLive: Record<string, { schluessel: string; v: number }> = {};
   private static fassungSchluessel(f: Fassung): string { return `${f.material_id}|${f.basis_bpm}|${f.fassung}`; }
-  private rasterWert(deck: number, f: Fassung): { versatz_frames: number; gespeichert_frames: number } {
-    const g = this.rasterGespeichert(f);
-    const x = this.rasterLive[String(deck)];
-    return { versatz_frames: x && x.schluessel === Oberflaeche.fassungSchluessel(f) ? x.v : g, gespeichert_frames: g };
-  }
-  private rasterOrdner(): string { return this.opt.rasterOrdner ?? rasterOrdnerVorgabe(); }
-  private huellenPfad(): string { return this.opt.huellen ?? huellenVorgabe(); }
+  private rasterWert(...a: Parameters<typeof RS.rasterWert>) { return RS.rasterWert.call(this, ...a); }
+  private rasterOrdner(...a: Parameters<typeof RS.rasterOrdner>) { return RS.rasterOrdner.call(this, ...a); }
+  private huellenPfad(...a: Parameters<typeof RS.huellenPfad>) { return RS.huellenPfad.call(this, ...a); }
   private liveLetzt: { w: number; t: number } | null = null;   // GET /analyse/live: ring counter and time of the previous call
   private masterPegel = new MasterPegel();   // GET /analyse/pegel: streaming master meter, advances on every read
   private masterPegelW: number | null = null;   // ring counter the meter has read up to
   private masterPegelLetzt: { w: number; t: number } | null = null;   // ring counter and time of first sight, for steht
   // Gespeicherter Versatz der Fassung; fehlt ihre Datei, gilt die der nächstälteren Fassung (rasterErbe, Bericht grid-phase M7).
   private readonly einsGelesen = new Map<string, { eins: number; esf: number }>();
-  private einsDerFassung(mid: string, bpm: number, fassung: number): { eins: number; esf: number } | null {
-    const k = `${mid}|${bpm}|${fassung}`, c = this.einsGelesen.get(k);
-    if (c !== undefined) return c;
-    try {
-      const q = fassungQuelle(this.opt.bestand, mid, bpm, fassung);
-      const j = JSON.parse(fs.readFileSync(path.join(path.dirname(q.datei), 'fassung.json'), 'utf8')) as Record<string, unknown>;
-      const e = { eins: Number(j.erste_eins_quell_beat), esf: Number(j.erster_schlag_frame) };
-      if (!Number.isFinite(e.eins) || !Number.isFinite(e.esf)) return null;
-      this.einsGelesen.set(k, e);
-      return e;
-    } catch { return null; }
-  }
-  private rasterErbeVon(f: Fassung): { v: number; von: number | null } {
-    return rasterErbe(this.rasterOrdner(), f, { fpb: 48000 * 60 / f.basis_bpm, einsVon: (r) => this.einsDerFassung(f.material_id, f.basis_bpm, r) });
-  }
-  private rasterGespeichert(f: Fassung): number { return this.rasterErbeVon(f).v; }
-  // Nur FIX (der ausdrückliche Speicherakt, Review B4; SET bleibt flüchtig wie der Raster-Versatz): die ganzen Beats im Versatz sind die Eins; sie gehört ins Material (korrekturen.jsonl art=eins), damit sie in
-  // jeder Folgefassung von selbst stimmt (kette.korrigieren). Ein Fehler hier darf das Grid nicht blockieren: nur loggen.
-  private einsZurueck(st: { f: Fassung; eins: number }, v: number, quelle: 'FIX'): void {
-    try {
-      const mo = path.join(this.opt.bestand, st.f.material_id);
-      const fpb = 48000 * 60 / st.f.basis_bpm;
-      const ziel = einsNachFix({ v, fpb, eins: st.eins, letzte: letzteEinsZeile(mo) });
-      if (ziel === null) return;
-      const k = Math.round(v / fpb);
-      haengeKorrekturAn(mo, einsZeile(st.f, ziel, k, quelle));
-      this.opt.log?.({ typ: 'eins_korrektur', quelle, material_id: st.f.material_id, fassung: st.f.fassung, eins: ziel, beats: k });
-    } catch (e) { this.opt.log?.({ typ: 'eins_korrektur_fehler', material_id: st.f.material_id, fehler: (e as Error).message }); }
-  }
-  private rasterSenden(deck: number, f: Fassung, v: number): void {
-    this.kern.sende('/k/deck/raster', { id: Number(++this.id), quelle: this.quelle(), deck, material_id: f.material_id,
-      basis_bpm: f.basis_bpm, fassung: f.fassung, versatz_frames: v });
-    this.gesendet++;
-    this.rasterLive[String(deck)] = { schluessel: Oberflaeche.fassungSchluessel(f), v };
-  }
-  // POST /deck/raster {deck, schritt_ms} (relativ, |schritt| ≤ 100 ms) oder {deck, versatz_frames} (absolut, ganzzahlig)
-  private deckRaster(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
-    const st = this.deckStand(d.deck);
-    if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
-    if (d.set === true) return this.deckRasterSet(st, a);
-    let v: number;
-    if (typeof d.versatz_frames === 'number' && Number.isInteger(d.versatz_frames) && Math.abs(d.versatz_frames) <= RASTER_MAX) {
-      v = d.versatz_frames;
-    } else if (typeof d.schritt_ms === 'number' && Number.isFinite(d.schritt_ms) && Math.abs(d.schritt_ms) <= 100) {
-      v = rasterSchritt(this.rasterWert(st.deck, st.f).versatz_frames, d.schritt_ms);
-    } else {
-      return this.json(a, 400, { fehler: 'schritt_oder_versatz' });
-    }
-    this.rasterSenden(st.deck, st.f, v);
-    this.json(a, 200, { ok: true, ...this.rasterWert(st.deck, st.f) });
-  }
-
-  // GET /hoeren?deck=1..4&takte=1..16 (Vorgabe 4): Ohr T5, erlaubt für jede Quelle (lesend).
-  private hoerenAus(url: URL, a: http.ServerResponse): void {
-    const deck = Number(url.searchParams.get('deck'));
-    if (!istOffenesDeck(deck)) return this.json(a, 400, { fehler: 'deck' });
-    const takteRoh = url.searchParams.get('takte');
-    const takte = takteRoh === null ? 4 : Number(takteRoh);
-    if (!Number.isInteger(takte) || takte < 1 || takte > 16) return this.json(a, 400, { fehler: 'takte' });
-    const u = this.kern.uhr;
-    if (!u) return this.json(a, 409, { fehler: 'kein_kernstand' });
-    const st = this.deckStand(deck);
-    // A place with a SEQ deck has no track on its deck player but a group that plays into deck/N (ADR 038): the ear reads that channel too
-    const op = this.proj.zugang.offen();
-    const arr = this.proj.sitzung.lage.arr;
-    const lage: DeckLage = hoerLage(deck, { geladen: st !== null, laeuft: st ? Number(st.z.status) >= 2 : false,
-      seqDeck: !!op?.projekt.live && seqGruppe(op.projekt, deck) !== undefined, seqLaeuft: !!arr && (arr.status === 1 || arr.status === 2),
-      offen: kanalOffen(this.stand.regler, pultContainerPfad[deck - 1]) });
-    const r = hoerAntwort(this.ohr, lage, u.beat, u.bpm, takte);
-    if (r.code === 200) {
-      // Ohr T8 (Plan Rev. 4): Sync unvalidiert (Befund Slice 2, anschlagPhase instabil an Mischungen,
-      // ~/messungen/2026-09-28-ohr-slice2/anschlag_echt.json) — geht NICHT ins Urteil (Task 9), nur mitgeliefert.
-      const kanalDeck = deck - 1;
-      const saetzeDeck = this.ohr.saetze(kanalDeck, r.j.gemessen_von_beat, r.j.gemessen_bis_beat);
-      // Decision 3 (places plan): the partner is the lowest other deck that runs with an open channel
-      const laufendOffen = OFFENE_DECKS.filter((n) => {
-        const stN = this.deckStand(n);
-        return stN !== null && Number(stN.z.status) >= 2 && kanalOffen(this.stand.regler, pultContainerPfad[n - 1]);
-      });
-      const partnerDeck = partnerVon(deck, laufendOffen);
-      const saetzePartner = partnerDeck !== null
-        ? this.ohr.saetze(partnerDeck - 1, r.j.gemessen_von_beat, r.j.gemessen_bis_beat) : null;
-      const s = ohrSync(saetzeDeck, saetzePartner, u.bpm);
-      r.j.sync = { sync_ms: s.sync_ms, deck_gegen_deck_ms: s.deck_gegen_deck_ms, n: s.n, partner: partnerDeck, validiert: false };
-      r.j.hoerschein = this.hoerscheinstelle.letzter(deck);   // Ohr T10
-      // Task 1.5: der Mess-Abgriff liegt NACH dem Trim (adr/008), also relativ korrigieren, nicht absolut.
-      // Einheit dB; absoluter Soll für deck/N/trim (derselbe Pfad wie /regler), geklemmt auf die Reglertabelle ±24.
-      // Kein Vorschlag, wenn der alte Trim unbekannt ist (stand.regler startet nach Seiten-Neustart leer, der Kern
-      // schickt Neuabonnenten keine Regler: `trim_unbekannt`) oder wenn eine Seite stumm ist (ohr db10 −200).
-      const v = r.j.vergleich;
-      const pd = v.pegel_diff_db;
-      if (typeof pd === 'number' && Number.isFinite(pd) && v.neu.lufs > -200 && v.laufend.lufs > -200) {
-        const trimAlt = this.stand.regler[`deck/${deck}/trim`];
-        if (typeof trimAlt === 'number' && Number.isFinite(trimAlt)) {
-          v.trim_vorschlag_db = Math.max(-24, Math.min(24, Math.round((trimAlt - pd) * 10) / 10));
-        } else {
-          v.trim_unbekannt = true;
-        }
-      }
-    }
-    this.json(a, r.code, r.j);
-  }
-
-  // GET /oszi?kanal=<name>&sek=1..15 (default 5): the last seconds of one ring channel as envelope plus measurements. The 100 ms reader keeps
-  // only deck/1, deck/2 and master; every other channel is read here, once per request, so the extra channels cost the tick nothing.
-  private osziAus(url: URL, a: http.ServerResponse): void {
-    const kanal = url.searchParams.get('kanal') ?? '';
-    if (!Object.hasOwn(OSZI_KANAELE, kanal)) return this.json(a, 400, { fehler: 'kanal' });
-    const sekRoh = url.searchParams.get('sek');
-    const sek = sekRoh === null ? 5 : Number(sekRoh);
-    if (sekRoh === '' || !Number.isInteger(sek) || sek < 1 || sek > 15) return this.json(a, 400, { fehler: 'sek' });
-    const ring = OSZI_KANAELE[kanal];
-    const leser = new OhrLeser(this.huellenPfad(), [ring], sek * 1000);
-    if (leser.lies(sek * 1000) === 0) return this.json(a, 409, { fehler: 'kein_ring' });
-    const bpm = this.kern.uhr && Number.isFinite(this.kern.uhr.bpm) && this.kern.uhr.bpm > 0 ? this.kern.uhr.bpm : null;
-    this.json(a, 200, { kanal, bpm, ...oszi(leser.alle(ring), { sek, bpm }) });
-  }
-
-  // GET /analyse/live: live picture of the master output from the audio ring. Always 200; steht: the ring counter did not move for 150 ms or more.
-  private analyseLiveAus(a: http.ServerResponse): void {
-    const x = leseBusRing(this.opt.busRing ?? path.join(shmOrdner(), 'bus'), LIVE_VORLAUF_FRAMES + LIVE_LAUTHEIT_FRAMES);
-    if (x === null) return this.json(a, 200, { leer: true, grund: 'kein_ring' });
-    const jetzt = Date.now(), l = this.liveLetzt;
-    const steht = l !== null && l.w === x.w && jetzt - l.t >= 150;
-    if (!(l !== null && l.w === x.w)) this.liveLetzt = { w: x.w, t: jetzt };   // keep the time of the first sight of this w, so a long stall stays steht
-    this.json(a, 200, { leer: false, w: x.w, steht, ...messeLive(x.daten) });
-  }
-
-  // GET /analyse/pegel (and POST .../reset with reset = true): streaming master meter. Always 200; reads only the frames written since the previous read.
-  private analysePegelAus(a: http.ServerResponse, reset = false): void {
-    const pfad = this.opt.busRing ?? path.join(shmOrdner(), 'bus');
-    let x = leseBusRingSeit(pfad, this.masterPegelW, 48000);
-    if (x !== null && this.masterPegelW !== null && x.w < this.masterPegelW) {   // ring recreated, the counter went back
-      this.masterPegelW = null;
-      x = leseBusRingSeit(pfad, null, 48000);
-    }
-    if (x === null) { this.masterPegelW = null; return this.json(a, 200, { leer: true, grund: 'kein_ring' }); }
-    this.masterPegel.schiebe(x.daten, x.luecke);
-    this.masterPegelW = x.w;
-    if (reset) this.masterPegel.zuruecksetzen();
-    const jetzt = Date.now(), l = this.masterPegelLetzt;
-    const steht = l !== null && l.w === x.w && jetzt - l.t >= 150;
-    if (!(l !== null && l.w === x.w)) this.masterPegelLetzt = { w: x.w, t: jetzt };
-    this.json(a, 200, { leer: false, w: x.w, steht, ...this.masterPegel.stand() });
-  }
-
-  // Ohr T10: je neuem Takt der Master-Uhr (Beat überschreitet ein Vielfaches von 4) Hörscheine ausstellen/zurückziehen.
-  private hoerscheinTakt(): void {
-    const u = this.kern.uhr;
-    if (!u) return;
-    const takt = Math.floor(u.beat / 4);
-    if (takt === this.hoerscheinLetzterTakt) return;
-    this.hoerscheinLetzterTakt = takt;
-    const decks: OhrDeckStand[] = OFFENE_DECKS.map((n) => {
-      const st = this.deckStand(n);
-      const laeuft = st !== null && Number(st.z.status) >= 2;
-      const inhalt = st ? `${st.f.material_id}/${Math.round(st.f.basis_bpm * 1000)}_r${st.f.fassung}` : '';
-      return { deck: n, laeuft, inhalt, bpm: st ? st.f.basis_bpm : 0 };
-    });
-    const aktionen = this.hoerscheinstelle.takt(this.ohr, u.beat, u.bpm, decks, (deck) => kanalOffen(this.stand.regler, pultContainerPfad[deck - 1]));
-    for (const akt of aktionen) {
-      // §4.5: quelle fest 'cypher' (die Analyse spricht als Cyphers Ohr, unabhängig von der Anfrage, die den Takt auslöste)
-      this.kern.sende(akt.adresse, { id: Number(++this.id), quelle: 'cypher', ...akt.felder });
-      this.gesendet++;
-    }
-  }
-  // POST /deck/raster {deck, set: true}: der Beat unter dem stehenden Kopf wird Takt-Eins (einsSetzen). Der Kern hält beim
-  // Versatz den Quell-Beat unter dem Kopf, der Ton rückt um k Beats; der Sprung um −k stellt den Kopf physisch zurück.
-  // Laufend 409: dort würde der Ton gegen den Master springen.
-  private deckRasterSet(st: NonNullable<ReturnType<Oberflaeche['deckStand']>>, a: http.ServerResponse): void {
-    if (Number(st.z.status) >= 2) return this.json(a, 409, { fehler: 'deck_laeuft' });
-    const alt = this.rasterWert(st.deck, st.f).versatz_frames;
-    const n = einsSetzen({ v: alt, quell: Number(st.z.quell_beat), eins: st.eins, fpb: 48000 * 60 / st.f.basis_bpm, erster: st.erster });
-    if (!n) return this.json(a, 409, { fehler: 'ausserhalb_bereich' });
-    if (n.k === 0) return this.json(a, 200, { ok: true, k: 0, ...this.rasterWert(st.deck, st.f) });
-    // Reihenfolge so, dass der Kopf dazwischen nach HINTEN wandert: nach vorn klemmt der Kern am Frame 0 (Instanz i,
-    // Kopf auf dem ersten Schlag, k −2: 1,56 Beats daneben). k > 0: Raster (sofort) rückt den Ton später, dann Sprung −k.
-    // k < 0: erst Sprung +|k| (später), abwarten, bis der Kern ihn meldet, dann Raster.
-    const deck = st.deck, q0 = Number(st.z.quell_beat);
-    const sprung = () => this.deckTeil('/k/deck/sprung', st, this.deckAb(st, 0), 0, { delta_beats: -n.k });
-    const fertig = () => {
-      this.opt.log?.({ typ: 'raster_set', deck, k: n.k, versatz_frames: n.v });
-      this.json(a, 200, { ok: true, k: n.k, ...this.rasterWert(deck, st.f) });
-    };
-    if (n.k > 0) { this.rasterSenden(deck, st.f, n.v); sprung(); return fertig(); }
-    sprung();
-    const ziel = q0 - n.k, t0 = Date.now();
-    const warte = () => {
-      const q = Number((this.stand.decks[String(deck)] as Record<string, unknown> | undefined)?.quell_beat);
-      if (Math.abs(q - ziel) < 1e-3) { this.rasterSenden(deck, st.f, n.v); return fertig(); }
-      if (Date.now() - t0 > 1500) return this.json(a, 504, { fehler: 'sprung_ohne_meldung' });
-      setTimeout(warte, 20);
-    };
-    warte();
-  }
-  // POST /deck/raster/fix {deck}: der Live-Versatz wird der gespeicherte (D3)
-  private deckRasterFix(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
-    const st = this.deckStand(d.deck);
-    if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
-    const v = this.rasterWert(st.deck, st.f).versatz_frames;
-    // Review F1: ein nur geerbter Satz hängt an der Audio-Stelle (rechnet mit dem gespeicherten Raster), ein eigener an der
-    // Raster-Position. Vor dem neuen Raster mit dem alten Versatz festschreiben, sonst hängt das Ergebnis von der Reihenfolge ab.
-    const hd = hotcueDatei(this.hotcueOrdner(), st.f);
-    if (!fs.existsSync(hd)) { const e = this.hotcuesErbeVon(st.f); if (e.von !== null) schreibeHotcues(hd, e.hotcues); }
-    schreibeRaster(rasterDatei(this.rasterOrdner(), st.f), v);
-    this.opt.log?.({ typ: 'raster_fix', deck: st.deck, versatz_frames: v });
-    this.einsZurueck(st, v, 'FIX');
-    this.json(a, 200, { ok: true, ...this.rasterWert(st.deck, st.f) });
-  }
-  // Nach /e/geladen und nach /e/neustart: gespeicherten (bzw. beim Neustart den live) Versatz an den Kern (D3, D7)
-  private rasterWieder(deck: number, f: Fassung, nachNeustart: boolean): void {
-    if (!f?.material_id) return;
-    const erbe = this.rasterErbeVon(f);
-    const v = nachNeustart ? this.rasterWert(deck, f).versatz_frames : erbe.v;
-    this.rasterLive[String(deck)] = { schluessel: Oberflaeche.fassungSchluessel(f), v };
-    if (v === 0) return;
-    this.rasterSenden(deck, f, v);
-    this.opt.log?.({ typ: 'raster_wieder', deck, versatz_frames: v, ...(erbe.von !== null && v === erbe.v ? { geerbt_von: erbe.von } : {}) });
-  }
+  private einsDerFassung(...a: Parameters<typeof RS.einsDerFassung>) { return RS.einsDerFassung.call(this, ...a); }
+  private rasterErbeVon(...a: Parameters<typeof RS.rasterErbeVon>) { return RS.rasterErbeVon.call(this, ...a); }
+  private rasterGespeichert(...a: Parameters<typeof RS.rasterGespeichert>) { return RS.rasterGespeichert.call(this, ...a); }
+  private einsZurueck(...a: Parameters<typeof RS.einsZurueck>) { return RS.einsZurueck.call(this, ...a); }
+  private rasterSenden(...a: Parameters<typeof RS.rasterSenden>) { return RS.rasterSenden.call(this, ...a); }
+  private deckRaster(...a: Parameters<typeof RS.deckRaster>) { return RS.deckRaster.call(this, ...a); }
+  private hoerenAus(...a: Parameters<typeof RS.hoerenAus>) { return RS.hoerenAus.call(this, ...a); }
+  private osziAus(...a: Parameters<typeof RS.osziAus>) { return RS.osziAus.call(this, ...a); }
+  private analyseLiveAus(...a: Parameters<typeof RS.analyseLiveAus>) { return RS.analyseLiveAus.call(this, ...a); }
+  private analysePegelAus(...a: Parameters<typeof RS.analysePegelAus>) { return RS.analysePegelAus.call(this, ...a); }
+  private hoerscheinTakt(...a: Parameters<typeof RS.hoerscheinTakt>) { return RS.hoerscheinTakt.call(this, ...a); }
+  private deckRasterSet(...a: Parameters<typeof RS.deckRasterSet>) { return RS.deckRasterSet.call(this, ...a); }
+  private deckRasterFix(...a: Parameters<typeof RS.deckRasterFix>) { return RS.deckRasterFix.call(this, ...a); }
+  private rasterWieder(...a: Parameters<typeof RS.rasterWieder>) { return RS.rasterWieder.call(this, ...a); }
 
   private readonly mediathek: Mediathek;
   private readonly katalog: Katalog;
@@ -493,416 +218,29 @@ export class Oberflaeche {
     this.handLog = new HandLog(handLogOrdnerVon(opt.hand?.logOrdner, instanz()));
     this.router.melde({ name: 'kopplung', routen: () => this.routenKopplung() });
     this.router.melde({ name: 'hand', routen: () => this.routenHand() });
-    // D1 S2 (Spec 3.4): Audio-Quellen über denselben Katalog wie der Browser. Spec 6.30: die Meldung bleibt zweizeilig (erst this.proj, dann melden),
-    // weil stoppe() den Bereich braucht; S3 zieht seinen Anker auf diese zwei Zeilen nach.
-    // Slice 3a: die Analyse-Ablage (Karten) und der Auftragsgeber der Analyse auf Abruf. Betrieb: Vorgabe $CYPHERDJ_ANALYSE bzw. ~/werkstatt/cypher-dj-analyse; eine
-    // Prüfinstanz (a..i) hat keine Vorgabe und liest/schreibt die Ablage nur mit ausdrücklichem --analyse (sie berührt nie die echte).
-    // A5: removable sources are collected into the project in the background, never while the transport runs or a deck plays
-    this.quellen = new Quellen({ python, cwd: path.join(REPO, 'djk'), erreichbar: this.erreichbar, env: opt.samplerOrdner ? { CYPHERDJ_SAMPLER: opt.samplerOrdner } : undefined });
-    this.router.melde(quellenBereich(this.bereichKontext(), this.quellen));   // A4: /quellen
-    // browser plan 1: raw file import into the storage kind importe (or the open project's audio folder)
-    // plan 7 task 12: the tags hook runs after the last good build, on the catalogue the tags area serves; a test instance only on its own /dev/shm catalogue
-    const hookKatalog = opt.katalog ?? katalogVorgabe(opt.mediathek ?? mediathekVorgabe());
-    const hookErlaubt = instanz() === '' || path.resolve(hookKatalog).startsWith(`/dev/shm/cypherdj-${instanz()}/`);
-    const katalogEnv = katalogUmgebung(instanz(), opt.samplerOrdner ? { CYPHERDJ_SAMPLER: opt.samplerOrdner } : undefined);
-    const hookEnv = { ...(katalogEnv ?? {}), ...(opt.katalog ? { CYPHERDJ_KATALOG: opt.katalog } : {}) };
-    const nachLetztemBau = hookErlaubt ? tagsHook({ python, cwd: path.join(REPO, 'djk'), env: hookEnv, katalog: hookKatalog,
-      tags: opt.tags?.pfad ?? path.join(path.dirname(hookKatalog), 'tags.sqlite'), log: (z) => opt.log?.(z) }) : undefined;
-    this.katalogJob = new KatalogJob({ python, cwd: path.join(REPO, 'djk'), env: katalogEnv, importeOrdner: () => importeOrdnerVorgabe(), ...(nachLetztemBau ? { nachLetztemBau } : {}) });
-    this.importDienst = new ImportDienst({ python, importeOrdner: () => importeOrdnerVorgabe(), projektAudioOrdner: () => { const o = this.proj.zugang.offen(); return o ? path.join(o.ordner, 'audio') : null; },
-      nachImport: katalogNachImport(this.katalogJob, () => importeOrdnerVorgabe()) });   // an accepted import registers the importe folder once and asks for one build
-    this.router.melde(importeBereich(this.bereichKontext(), this.importDienst, { port: () => this.opt.port }));   // /import/datei
-    this.router.melde(katalogBereich(this.bereichKontext(), this.katalogJob));   // /bibliothek/bauen, /bibliothek/stand, /bibliothek/midi
-    this.einsammler = new Einsammler({ wechselplatte: (p) => this.quellen.wechselplatte(p), frei: () => this.proj.sitzung.lage.arr !== null && this.proj.sitzung.lage.arr.status === 0 && !this.proj.sitzung.lage.djLaeuft(),   // the page's own question: deck, loop box, stream
-      log: (z) => opt.log?.(z) });
-    const analyseOrdner = opt.analyse !== undefined ? opt.analyse : analyseVorgabe(inst);
-    const analysierer = analyseOrdner ? new WerkstattAnalyse({ python, cwd: REPO_PFADE.werkstatt, ablage: analyseOrdner, modul: opt.einleserModul, log: opt.log }) : null;
-    // browser plan 6: the preset preview service (offline render, cache) and the headphone previewer; one store is shared with the PRESETS routes
-    const presetSpeicher = opt.presets?.speicher ?? new PresetSpeicher(opt.presets ?? {});
-    const presetVorhoerer = opt.presets?.vorhoerer ?? new PresetVorhoerer({ speicher: presetSpeicher, cacheOrdner: vorhoerCacheVorgabe(inst),
-      loopsDatei: path.join(REPO, 'djk', 'starter', 'loops.json'), starterWavOrdner: path.join(os.homedir(), '.local', 'share', 'cypherdj', 'starter', 'klaenge', 'loops'),
-      graphenOrdner: graphenOrdner(), kitOrdner: opt.kits ?? kitsOrdnerVorgabe(), log: (z) => opt.log?.({ typ: 'preset_vorhoeren', ...z }) });
-    const presets = presetsBereich(this.bereichKontext(), { ...(opt.presets ?? {}), speicher: presetSpeicher, port: () => this.opt.port, vorhoerer: presetVorhoerer, spiele: opt.presets?.spiele ?? ((e, klick) => this.vorhoeren.spiele(e, klick)), neuerKlick: opt.presets?.spiele ? undefined : () => this.vorhoeren.neuerKlick(), projekt: () => this.proj.zugang.offen()?.projekt ?? null, graphVon: (kanal) => this.stand.graphen_geladen[kanal] });   // 1.9 (O28): built first, the project command preset_anwenden reads its store
-    const pluginIndex = new PluginIndex({ python, ...opt.plugins, log: opt.log, bei: (scan) => this.bereichKontext().verteile({ a: 'plugins', f: { scan } }) });
-    this.proj = projBereich(this.bereichKontext(), { pluginIndex: (id) => pluginIndex.finde(id), presetLies: (id) => presetInhaltVon(presets.speicher, id), katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? mediathekVorgabe()), mediathek: opt.mediathek ?? mediathekVorgabe(),
-      wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), kanalOffen: (k) => this.kanalGeoeffnet(k), einsammler: this.einsammler, samplerOrdner: () => opt.samplerOrdner, ...opt.proj });
-    this.router.melde(this.proj);
-    // A5: the route uses the collector of the session (a test may hand its own through opt.proj)
-    this.router.melde(einsammelnBereich(this.bereichKontext(), this.proj.zugang, { einsammler: opt.proj?.einsammler ?? this.einsammler,
-      quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis), kitsOrdner: opt.kits ?? kitsOrdnerVorgabe() }));
-    // browser plan 2: GET /proj/dateien and the project file actions. The recovered-take listing is plan 4's (areas/proj/recording_rettung.ts); a test may hand a stub through opt.proj.
-    this.router.melde(dateienBereich(this.bereichKontext(), this.proj.zugang, { quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis),
-      katalogName: (sha) => this.proj.sitzung.katalogQuelle(sha)?.name ?? null, katalogDa: () => fs.existsSync(opt.katalog ?? katalogVorgabe(opt.mediathek ?? mediathekVorgabe())), wurzel: () => opt.proj?.wurzel ?? projektWurzelVorgabe(inst),
-      arbeitLaeuft: (opt.proj as { arbeitLaeuft?: () => boolean } | undefined)?.arbeitLaeuft ?? (() => this.ausgabe.ausgabe.zustand().lauf !== null || this.stems.stems.laeuft() || this.noten.analyse.laeuft()),   // a test may hand a stub
-      gerettetListe: (opt.proj as { gerettetListe?: (ordner: string) => Promise<{ datei: string; spur_id: string; gerettet: true }[]> } | undefined)?.gerettetListe ?? ((o) => gerettetListeVon(o, (z) => opt.log?.(z))) }));
-    this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis(),
-      katalogPfad: (sha) => this.proj.sitzung.katalogQuelle(sha),
-      nachExport: baueNachExport({ einsammler: opt.proj?.einsammler ?? this.einsammler, offen: () => this.proj.zugang.offen(),
-        quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis), log: (z) => opt.log?.(z) }) });   // A5: keep three exports, collect   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
-    this.router.melde(this.ausgabe);
-    const tastenArm = neuerTastenArm();   // keys follow the focus (N1): session state shared by the controller area (decides) and the recording area (arms in the core)
-    this.aufnahme = aufnahmeBereich(this.bereichKontext(), this.proj.zugang, { geraeteKonfig: opt.geraete?.konfigPfad, tasten: tastenArm });   // 1.8: /proj/aufnahme
-    this.router.melde(this.aufnahme);
-    let tagsB: ReturnType<typeof tagsBereich> | undefined;   // built further down; the stems hook reads it when a placement happens
-    this.router.melde(versionenBereich(this.bereichKontext(), this.proj.sitzung));   // B10: /proj/versionen, /proj/version_sichern, /proj/version_zurueck
-    this.router.melde(rettungBereich(this.bereichKontext(), this.proj.zugang));   // B11: POST /proj/gerettet_platzieren
-    starteRettung(this.proj.zugang, this.bereichKontext());                       // B11: rescue left run files when a project opens
-    this.stems = stemsBereich(this.bereichKontext(), this.proj.zugang, { python, cwd: REPO_PFADE.werkstatt, bezug: (a, v, n) => { tagsB?.speicher.meldeBezug(a, v, n); }, ...opt.stems });   // 1.13 S6
-    this.router.melde(this.stems);
-    const notenOpt = { programm: notenProgramm(), netz: [python, '-m', 'werkstatt.notes_net'] as string[] | null, cwd: REPO_PFADE.werkstatt,
-      stemsLaeuft: () => this.stems.stems.laeuft(), ...opt.noten };
-    // note editor B4: the render of a note edit is what a clip plays; the same program, environment and CPU mask as the detection. Wired in starte().
-    this.notenRender = new NotenRender(this.bereichKontext(), this.proj.zugang, { programm: notenOpt.programm, netz: notenOpt.netz, cwd: notenOpt.cwd,
-      neuLaden: () => this.proj.sitzung.ladeLiveNeuFrei(),
-      ...(notenOpt.env ? { env: notenOpt.env } : {}), ...(notenOpt.cpus !== undefined ? { cpus: notenOpt.cpus } : {}), ...(notenOpt.spawn ? { spawn: notenOpt.spawn } : {}),
-      ...(notenOpt.killMs !== undefined ? { killMs: notenOpt.killMs } : {}) });
-    this.noten = notenBereich(this.bereichKontext(), this.proj.zugang, { ...notenOpt, render: this.notenRender });   // note editor B2: /proj/noten/*
-    this.router.melde(this.noten);
-    this.router.melde(liveBereich(this.bereichKontext(), this.proj.zugang, this.stems.stems, {   // plan live-module task 2: /modul/export, /modul/stems, /modul/stand
-      loopOrdner: () => this.loopOrdner(),   // task 10: POST /modul/loop reads the loop library
-      kanalOffen: (k) => this.kanalGeoeffnet(k),   // DJ view places task 7: an open channel refuses the export (PFL is no reason; a planned or running ramp counts)
-      deckLoop: (deck) => this.deckLoopAusschnitt(deck), herkunft: (mid) => this.moduleHerkunft(mid), masterTonart: () => this.masterTonart(),
-      samplerOrdner: () => opt.samplerOrdner,
-      deckLaeuft: (n) => { const st = this.deckStand(n); return st !== null && Number(st.z.status) >= 2; },   // SEQ deck: POST /seq/anlegen refuses deck_laeuft
-      // SEQ scenes: the bar target comes from the same-block /uhr + /zustand/arr pair of the session's lage, the parts go through the shared KernWeg
-      szenen: { zielLage: (loop) => this.proj.sitzung.lage.zielLage(loop), szenenTeile: (plan, q, ab, zeilen) => this.kernWeg().szenenTeile(plan, q, ab, zeilen),
-        abbruchPlan: (plan, q) => this.kernWeg().abbruchPlan(plan, q) },
-      deckAufraeumen: (n, quelle) => { this.seqNachgeladen.delete(n); this.seqDeckAufraeumen(n, quelle, false); },   // SEQ deck: a new deck ejects a stopped, closed track of its place
-      // task 3: every module is saved (at export, when the stems arrive, when the slot is cleared); the ramp of POST /modul/leeren reads the core clock
-      nachExport: (e) => { speichereModul(e.projekt, e.gruppeId, { basis: modulBasisVon(opt.modulOrdner, inst) }); },
-      nachStems: (e) => { speichereModul(e.projekt, e.gruppeId, { basis: modulBasisVon(opt.modulOrdner, inst) }); },
-      midi: { python, cwd: REPO_PFADE.werkstatt, pegel: renderPegelMesser(this.proj.zugang) },   // task 8: MIDI of Drums and Bass (werkstatt.midi_aus_stem) for the new instrument paths
-      leeren: { speichere: (p, gid) => speichereModul(p, gid, { basis: modulBasisVon(opt.modulOrdner, inst) }),
-        kern: { uhr: () => (this.kern.uhr as { beat: number; bpm: number } | null),
-          laeuft: () => { const st = this.proj.sitzung.lage.arr?.status; return st === 1 || st === 2; } } } }));
-    // loop deck M4: /loopdeck/stand, /start, /stopp, /szene; the decoded length of a cell comes from the decode folder of the project
-    const zellFrames = (sha: string): number | null => {
-      try { const g = fs.statSync(path.join(this.proj.zugang.arbeitsordner(), 'audio', `${sha}.f32`)).size; return g >= 8 ? Math.floor(g / 8) : null; } catch { return null; }
-    };
-    // slice boundaries by transients (POST /session/scheiben): the same store beside the decoded .f32 as the project session's (content-addressed, atomic writes)
-    const transientenLager = new TransientenLager(path.join(this.proj.zugang.arbeitsordner(), 'audio'));
-    const loopdeck = loopdeckBereich(this.bereichKontext(), this.proj.zugang, {
-      frames: zellFrames,
-      liveOeffnen: (q) => this.proj.sitzung.liveOeffnen(q, false, true),   // M5 writes open or create the live container the way POST /live/oeffnen does
-      loopOrdner: () => this.loopOrdner(), modulBasis: () => modulBasisVon(opt.modulOrdner, inst),
-      katalogLoop: (sha) => this.katalogFuerDeck(sha), deckLoop: (deck) => this.deckLoopAusschnitt(deck) });
-    this.router.melde(loopdeck);
-    // session view M6: /session/*; the scene tempo uses the freeze lock like POST /tempo
-    this.router.melde(sessionBereich(this.bereichKontext(), this.proj.zugang, loopdeck, { frames: zellFrames, transienten: (sha) => transientenLager.fuer(sha),
-      kit: (a) => legeKitAusAudio({ name: a.name, daten: a.daten, quelle: a.quelle, scheiben: a.scheiben.map((r) => ({ von: Math.round(r.von_s * 48000), bis: Math.round(r.bis_s * 48000) })) },
-        { kits: this.opt.kits ?? kitsOrdnerVorgabe() }),
-      vorhoeren: async (a) => {   // slot audition: the previewer takes a file, so the rendered slot goes to a WAV named by its content (older ones are removed)
-        const wav = Buffer.concat([wavKopf(a.daten.length / 2), Buffer.from(a.daten.buffer, a.daten.byteOffset, a.daten.byteLength)]);
-        const dir = path.join(this.proj.zugang.arbeitsordner(), 'vorhoer'), id = crypto.createHash('sha256').update(wav).digest('hex').slice(0, 16);
-        fs.mkdirSync(dir, { recursive: true });
-        for (const n of fs.readdirSync(dir)) fs.rmSync(path.join(dir, n), { force: true });
-        const pfad = path.join(dir, `slot-${id}.wav`);
-        fs.writeFileSync(pfad, wav);
-        await this.vorhoeren.spiele({ pfad, typ: 'oneshot', sha: `${a.sha}/${a.slot}`, bpm: null });
-      },
-      audio: (sha) => { try { return alsFloat32(fs.readFileSync(path.join(this.proj.zugang.arbeitsordner(), 'audio', `${sha}.f32`))); } catch { return null; } }, ladenGesperrt: () => this.proj.sitzung.ladenGesperrt() }));
-    this.router.melde(loopsetsBereich(this.bereichKontext(), this.proj.zugang));   // loop deck S1b: /loopsets, /loopset/speichern, /loopset/laden (store kind loopsets)
-    // plan live-module task 10: GET /module, POST /modul/einsetzen, POST /modul/speichern (the same store as above)
-    this.router.melde(bibliothekBereich(this.bereichKontext(), this.proj.zugang, { basis: () => modulBasisVon(opt.modulOrdner, inst), kanalOffen: (k) => this.kanalGeoeffnet(k) }));
-    // sampler A1 task 4: /sampler/*; loops and module folder of this instance, read at every request (the getters follow the options)
-    this.router.melde(samplerBereich(this.bereichKontext(), { sitzung: this.proj.sitzung, zugang: this.proj.zugang, katalog: this.katalog,
-      get ordner() { return opt.samplerOrdner; }, get loops() { return opt.loops ?? loopOrdnerVorgabe(inst); }, get module() { return modulBasisVon(opt.modulOrdner, inst); } }));
-    this.router.melde(samplerKitBereich(this.bereichKontext(), { get ordner() { return opt.samplerOrdner; } }));   // sampler B task 2: /sampler/kit/vorschlag, /sampler/kit
-    // browser plan 5: /kits (list, export, import; rename, copy, delete, preview and from-folder follow); the same kit folder as the sampler kit route
-    this.router.melde(kitsBereich(this.bereichKontext(), { kitsOrdner: opt.kits ?? kitsOrdnerVorgabe(), projektOrdner: () => this.proj.zugang.offen()?.ordner ?? null, port: () => this.opt.port,
-      projekteWurzel: () => this.opt.proj?.wurzel ?? projektWurzelVorgabe(instanz()),
-      vorhoeren: async (wavPfad, sha) => {   // like the slot audition: the previewer takes a file from the work folder; older kit previews are removed
-        const dir = path.join(this.proj.zugang.arbeitsordner(), 'vorhoer');
-        fs.mkdirSync(dir, { recursive: true });
-        for (const n of fs.readdirSync(dir)) if (n.startsWith('kit-')) fs.rmSync(path.join(dir, n), { force: true });
-        const pfad = path.join(dir, path.basename(wavPfad));
-        fs.copyFileSync(wavPfad, pfad);
-        await this.vorhoeren.spiele({ pfad, typ: 'oneshot', sha, bpm: null });
-      } }));
-    // journey tours task 2: /mitschnitt (REC MIX): the recorder runs in its own user unit and only reads the core's ring
-    this.router.melde(mitschnittBereich(this.bereichKontext(), { ordner: () => mitschnittOrdnerVorgabe(instanz()), zustandsDatei: path.join(shmOrdner(instanz()), 'mitschnitt.json'),
-      programm: setmitschnittProgramm, instanz: instanz(), kernDa: () => this.kern.zustand === 'verbunden' }));
-    // browser plan 5: /proj/export_zip and /proj/import_zip (a project as one zip)
-    this.router.melde(portabelBereich(this.bereichKontext(), this.proj.zugang, { projekteWurzel: () => this.opt.proj?.wurzel ?? projektWurzelVorgabe(instanz()),
-      quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis), kitsOrdner: opt.kits ?? kitsOrdnerVorgabe(), port: () => this.opt.port }));
-    this.router.melde(pluginsBereich(this.bereichKontext(), pluginIndex, { insertParameter: (id) => this.proj.sitzung.insertParameter(id),
-      insertFenster: (id, d, q) => this.proj.sitzung.insertFenster(id, d, q),
-      geraetParameter: (id) => this.proj.sitzung.geraetParameter(id), geraetParam: (id, d, q) => this.proj.sitzung.geraetParam(id, d, q), geraetIst: (id, n) => this.proj.sitzung.geraetIst(id, n),
-      geraetFenster: (id, d, q) => this.proj.sitzung.geraetFenster(id, d, q) }, { port: () => this.opt.port, erlaubt: () => erlaubteWurzeln() }));   // 1.11 task 10; plan 6: plugin folders (the roots of the folder picker): /plugins, the parameter list and the window
-    let controllerAnstoss: () => void = () => {};   // set below: the devices file may change a place's follow flag or its device
-    this.router.melde(geraeteBereich(this.bereichKontext(), { ...(opt.geraete ?? {}), beiAenderung: () => controllerAnstoss() }));   // I08: /geraete
-    const lernBereich = lernenBereich(this.bereichKontext(), opt.lernen ?? {});
-    this.router.melde(lernBereich);   // S19: /lernen
-    this.proj.sitzung.reglerLernen = { pruefeBereit: () => lernBereich.pruefeBereit(), arme: (p) => lernBereich.arme(p), wartet: () => lernBereich.wartet(),
-      abbrechen: () => lernBereich.abbrechen(), loesche: (p) => lernBereich.loesche(p),
-      gelernt: () => new Set(lernBereich.speicher.lies().zuordnungen.map((z) => z.pfad)) };   // strand 2 task 2.4: the knob learn route of a plugin stage
-    // controller presets and follow: /controller/*; re-resolves on the kern event /e/graph, on every change of the open project and on a change of the devices file
-    const controller = controllerBereich(this.bereichKontext(), lernBereich, { geraeteKonfig: opt.lernen?.geraeteKonfig, werk: opt.lernen?.werkOrdner, nutzer: opt.lernen?.presetOrdner, zugang: this.proj.zugang, tasten: tastenArm });
-    this.router.melde(controller);
-    this.router.melde(pultBereich(this.bereichKontext(), { zugang: this.proj.zugang, pult: () => aktivesPult(inst) }));   // the APC20 in PRODUCTION: /controller/ansicht, /controller/pult (pult_production.ts)
-    controllerAnstoss = () => { void controller.anstoss(); };
-    this.proj.zugang.beiStand(() => controllerAnstoss());
-    this.router.melde(hostlernenBereich(this.bereichKontext(), lernBereich, { ordner: lernBereich.speicher.ordner }));   // host learn: /lernen/host, host_ziele.json next to lernen.json
-    this.router.melde(registerBereich(this.bereichKontext(), { ordner: lernBereich.speicher.ordner, aktiv: () => aktivesPult(inst), midiPort: () => lernBereich.midiPort(), host: () => new HostSpeicher(lernBereich.speicher.ordner).lies().ziele }));   // controller register: /register
-    this.router.melde(presets);   // 1.16: /presets (presets/area.ts), built above so that the project command preset_anwenden reads its store
-    this.router.melde(kollektionenBereich(this.bereichKontext(), opt.kollektionen ?? {}));   // 1.16 rest: /kollektionen (collections/area.ts)
-    tagsB = tagsBereich(this.bereichKontext(), { katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? mediathekVorgabe()),
-      quellen: echteQuellen({ presets: presets.speicher, projekte: (() => { const pr = new Projekte(opt.proj?.wurzel ?? projektWurzelVorgabe(instanz())); return { wurzelPfad: pr.wurzelPfad, liste: () => pr.liste(), lies: (sl: string) => pr.lies(sl), liesAsync: (sl: string) => liesProjektDatei(pr.wurzelPfad, sl) }; })(),
-        kitsOrdner: () => opt.kits ?? kitsOrdnerVorgabe(), loopOrdner: () => this.loopOrdner(), listeLoops: leseLoops,
-        katalogSha: (mid) => this.katalogEintrag(mid)?.sha ?? null, schnitt: (id) => liesSchnitt(id, { ordner: opt.samplerOrdner }) }), ...(opt.tags ?? {}) });
-    this.router.melde(tagsB);   // B19..B21: /tags, tags.sqlite next to the catalogue (tags/area.ts)
-    this.tagsStopp = () => { tagsB?.bezuege?.stopp(); tagsB?.speicher.schliesse(); };   // close(): no further slice, then the tag store handle is closed
-    // media browser B4: GET /suche asks the sources the shelf already has (catalogue, graphs, sampler lists, presets, modules), each with its own search
-    this.router.melde(sucheBereich(this.bereichKontext(), {
-      projekt: () => this.proj.zugang.offen()?.projekt ?? null,
-      quellen: baueQuellen({
-        katalog: this.katalog,
-        fehlend: (typ) => this.katalog.ordnerSummen(typ).ordner.filter((o) => !this.erreichbar.ordnerDa(o.pfad)).map((o) => o.pfad),
-        rang: () => rangVon(this.kollektionSpeicher()),
-        zeile: (z, favorit) => ({ ...this.stoebernTreffer(z, new Set()), favorit }),
-        graphen: () => listeGraphen(undefined, { ordner: opt.samplerOrdner }).graphen,
-        instrumente: () => listeInstrumente({ ordner: opt.samplerOrdner }).map(instrumentZeile),
-        schnitte: () => listeSchnitte({ ordner: opt.samplerOrdner }).map(schnittKurz),
-        presets: (q) => presets.speicher.liste({ q }).map(({ notiz: _n, ...e }) => e),
-        module: () => this.proj.sitzung.liste().j as unknown as Record<string, unknown>[],
-      }),
-    }));
+    BE.verdrahteBereiche.call(this, opt, python, inst);
   }
 
-  async starte(): Promise<void> {
-    const gemerkt = this.leseOffenesProjektDatei();   // read before anything can overwrite it
-    // note editor B4: the render service knows the engine version and the cache before the first project opens; every stand then goes through it
-    await this.notenRender.start();
-    this.harmonie.lade();   // the live lane comes back from the folder of stream 2
-    this.proj.zugang.beiStand((p) => this.notenRender.beiStand(p));
-    this.proj.sitzung.setzeNotenRender(this.notenRender);
-    this.proj.sitzung.beiOffen((slug) => this.merkeOffenesProjekt(slug));
-    this.proj.zugang.beiStand(() => this.meldeTaktart());   // studio-taktart: also after undo; the meter follows the open project
-    this.proj.sitzung.beiOffen(() => this.meldeTaktart());   // and after a close on purpose (no project: 4)
-    // first call: removes a stale meter file left by a crash. With a remembered project it waits for the reopen (which publishes the meter itself),
-    // otherwise running n/4 generators would see "missing = 4" and flip to 4 in between; if the reopen fails, projektWiederOeffnen makes the call.
-    if (gemerkt === null) this.meldeTaktart();
-    this.spurenLaden();   // Studio S6 F2
-    this.ladeAktiveLoops();   // gemerkter Deck-Loop von vor dem Neustart
-    this.ladeNeustartStand();   // t_7f487235: FX, Boxen, Graphen und ihre Besitzer von vor dem Neustart
-    const reste = raeumeAuf(this.opt.arbeitsbestand);
-    if (reste > 0) this.opt.log?.({ typ: 'aufgeraeumt', anzahl: reste, arbeitsbestand: this.opt.arbeitsbestand });
-    const importReste = raeumeImportReste(this.loopOrdner());   // S6: Arbeitsordner eines abgestürzten Loop-Imports
-    if (importReste > 0) this.opt.log?.({ typ: 'loop_import_aufgeraeumt', anzahl: importReste });
-    const werks = sichereWerksProbenImStandardOrdner();   // the factory samples of the amiga device: no amiga graph translates without them
-    if (werks.length > 0) this.opt.log?.({ typ: 'werksproben_angelegt', dateien: werks });
-    // slot banks (amiga-<hex>, smp-p*.f32) that no project or module names any more: old ones go, see sampler/waisen.ts
-    const waisen = raeumeWaisenImStandardOrdner([this.opt.proj?.wurzel ?? projektWurzelVorgabe(instanz()), modulBasisVon(this.opt.modulOrdner, instanz())]);
-    if (waisen.graphen.length + waisen.samples.length > 0 || waisen.uebersprungen !== null) this.opt.log?.({ typ: 'waisenbaenke_aufgeraeumt', ...waisen });
-    await this.kern.starte();
-    this.ohrTakt = setInterval(() => { this.ohr.lies(); this.hoerscheinTakt(); }, 100);  // Ohr T5/T10: Ring 100 ms nachlesen, je neuem Takt Hörscheine
-    this.graphTakt = setInterval(() => { if (this.generation !== null) this.fragGraphen('takt'); }, Oberflaeche.GRAPH_FRAGE_MS);   // Baukasten S16
-    this.graphTakt.unref();
-    this.schluessel.sichereLokal();   // the local hand's key file exists before anything can ask for it
-    this.http = http.createServer((q, a) => { this.anfrage(q, a).catch((e: Error) => this.json(a, 500, { fehler: e.message })); });
-    await new Promise<void>((ok, fehler) => {
-      this.http!.once('error', fehler);
-      this.http!.listen(this.opt.port, '127.0.0.1', () => ok());
-    });
-    await this.starteTablet();
-    void pruefeKatalogBeiStart(this.katalogJob, instanz(), this.opt.log);   // the studio only: a changed music tree starts one build
-    this.projektWieder = this.projektWiederOeffnen(gemerkt);
-  }
+  starte(...a: Parameters<typeof LB.starte>) { return LB.starte.call(this, ...a); }
 
   // The project that was open last comes back after a restart of the page server: its slug lives in offenes_projekt.json next to neustart_stand.json (same
   // temp file and rename). It is written at every open and removed by a close on purpose (POST /proj/schliessen); djk-stop leaves it alone. The reopen goes
   // through ProjSitzung.oeffnen, the code of POST /proj/oeffnen, once the kern is there. It never sends a transport start. Any failure: start empty, one log
   // line, one notice on the demo overlay line (the SSE event `ansage`, also in /ansage).
   projektWieder: Promise<void> = Promise.resolve();
-  private offenesProjektDatei(): string { return path.join(this.hotcueOrdner(), 'offenes_projekt.json'); }
-  private leseOffenesProjektDatei(): string | null {
-    let text: string | null = null;
-    try { text = fs.readFileSync(this.offenesProjektDatei(), 'utf8'); } catch { /* nothing remembered yet */ }
-    return leseOffenesProjekt(text);
-  }
-  private merkeOffenesProjekt(slug: string | null): void {
-    try {
-      if (slug === null) { fs.rmSync(this.offenesProjektDatei(), { force: true }); return; }
-      fs.mkdirSync(this.hotcueOrdner(), { recursive: true });
-      const tmp = `${this.offenesProjektDatei()}.${process.pid}.neu`;
-      fs.writeFileSync(tmp, JSON.stringify({ v: 1, slug }));
-      fs.renameSync(tmp, this.offenesProjektDatei());
-    } catch (err) { this.opt.log?.({ typ: 'offenes_projekt_nicht_gesichert', text: (err as Error).message }); }
-  }
-  private async projektWiederOeffnen(slug: string | null): Promise<void> {
-    if (slug === null) return;
-    const scheitert = (grund: string): void => {
-      this.opt.log?.({ typ: 'projekt_wieder_oeffnen_fehlgeschlagen', slug, grund });
-      this.meldeTaktart();   // nothing came back: no project, so a stale meter file of the crash goes now
-      this.ansageZeile = { text: `Could not reopen project ${slug}`, art: 'tat', von: 'cypher', zeit: Date.now() };
-      this.verteile({ a: 'ansage', f: this.ansageZeile });
-    };
-    const frist = this.opt.wiederOeffnenFristMs ?? 15000;
-    for (let t0 = Date.now(); this.kern.zustand !== 'verbunden'; await new Promise((r) => setTimeout(r, 50))) {
-      if (this.gestoppt) return;
-      if (Date.now() - t0 >= frist) return scheitert('kein_kern');
-    }
-    if (this.gestoppt || this.proj.sitzung.offen !== null) return;   // stopped meanwhile, or somebody opened a project first: theirs wins
-    try {
-      const r = await this.proj.sitzung.oeffnen(slug, 'andreas');
-      if (r.code === 200) this.opt.log?.({ typ: 'projekt_wieder_geoeffnet', slug });
-      else scheitert(String((r.j as { fehler?: unknown } | null)?.fehler ?? `code_${r.code}`));
-    } catch (e) { scheitert((e as Error).message); }
-  }
-
-  // The second listener (task 10): only when tablet.json says so, only on the home-network address found from the interfaces, only with a pairing cookie
-  // (http/coupling.ts). Any problem leaves it off and the loopback page running; it never falls back to another address.
-  private async starteTablet(): Promise<void> {
-    const t = this.opt.tablet;
-    if (!t && instanz() !== '') return;   // a test instance never reads the live config
-    const konfigPfad = t?.konfigPfad ?? path.join(os.homedir(), '.config', 'cypherdj', 'tablet.json');
-    let an = false;
-    try { an = (JSON.parse(fs.readFileSync(konfigPfad, 'utf8')) as { an?: unknown }).an === true; } catch { /* no file: off */ }
-    if (!an) return;
-    const adresse = heimAdresse((t?.schnittstellen ?? os.networkInterfaces)());
-    if (adresse === null) { this.opt.log?.({ typ: 'tablet_verweigert', grund: 'keine_heimnetz_adresse' }); return; }
-    const port = t?.port ?? TABLET_PORT;
-    const host = `${adresse}:${port}`;
-    this.tabletHandler = baueTabletHandler({ kopplung: this.kopplung, host, json: (a, c, d) => this.json(a, c, d), log: (z) => this.opt.log?.(z),
-      logMs: t?.logMs, weiter: (q, a) => this.qs.run('andreas', () => this.anfrageInnen(q, a, `http://${host}`)) });   // a paired tablet is Andreas, whatever x-djk-quelle says
-    const handler = this.tabletHandler;
-    const server = http.createServer((q, a) => { handler.anfrage(q, a).catch((e: Error) => this.json(a, 500, { fehler: e.message })); });
-    try {
-      await new Promise<void>((ok, fehler) => { server.once('error', fehler); server.listen(port, t?.bindeAn ?? adresse, () => ok()); });
-    } catch (e) { this.opt.log?.({ typ: 'tablet_verweigert', grund: 'bind', text: (e as Error).message }); this.tabletHandler = null; return; }
-    this.tabletServer = server;
-    this.tablet = { adresse, port };
-    this.opt.log?.({ typ: 'tablet_an', adresse, port });
-  }
-
-  // Andreas only, from the loopback page: not the tablet, not a rebinding host name, not source cypher.
-  private nurAndreasLoopback(q: http.IncomingMessage, a: http.ServerResponse, text: string): boolean {
-    const vomTablet = this.tablet !== null && q.socket.localPort === this.tablet.port;
-    if (vomTablet) { this.json(a, 403, { fehler: 'nicht_am_tablet' }); return false; }
-    const host = String(q.headers.host ?? '');   // only a loopback name: a rebinding page must not reach this
-    if (host !== `127.0.0.1:${this.opt.port}` && host !== `localhost:${this.opt.port}`) {
-      this.json(a, 421, { fehler: 'falscher_host', text: 'open the page as http://127.0.0.1:<port>/ to manage pairing' });
-      return false;
-    }
-    if (this.quelle() === 'cypher') { this.json(a, 403, { fehler: 'nur_andreas', text }); return false; }
-    return true;
-  }
-
-  // The agent brake (Stop Cypher in the page): GET reads the state, POST {an} sets it.
-  private routenHand(): Route[] {
-    const F = 'fremdePost' as const, O = 'offen' as const;
-    return [
-      { methode: 'GET', pfad: '/hand/bremse', schutz: O, handler: (_q, a) => this.json(a, 200, this.handStand()) },
-      { methode: 'POST', pfad: '/hand/bremse', schutz: F, handler: async (q, a) => {
-        if (!this.nurAndreasLoopback(q, a, 'the agent brake is Andreas\'s')) return;
-        const an = (await this.koerper(q)).an;
-        if (typeof an !== 'boolean') return this.json(a, 400, { fehler: 'an_fehlt' });
-        this.setzeHandBremse(an);
-        this.json(a, 200, this.handStand());
-      } },
-      { methode: 'GET', pfad: '/hand/log', schutz: O, handler: (q, a, url) => {
-        if (!this.nurAndreasLoopback(q, a, 'the agent log is Andreas\'s')) return;
-        const n = Math.min(200, Math.max(1, Math.floor(Number(url.searchParams.get('n') ?? 50)) || 50));
-        this.json(a, 200, { zeilen: this.handLog.letzte(n), datei: this.handLog.datei });
-      } },
-      { methode: 'GET', pfad: '/hand/ich', schutz: O, handler: (_q, a) => {
-        const w = this.wer.getStore() ?? null;
-        const gestoppt = this.kiGestoppt;
-        this.json(a, 200, this.quelle() === 'cypher' && w ? { id: w.id, name: w.name, stufe: w.stufe, gestoppt } : { id: null, stufe: null, gestoppt });
-      } },
-      { methode: 'GET', pfad: '/hand/schluessel', schutz: O, handler: (q, a) => {
-        if (!this.nurAndreasLoopback(q, a, 'managing agent keys is Andreas\'s')) return;
-        this.json(a, 200, { schluessel: this.schluessel.liste().map(({ id, name, stufe, zuletzt }) => ({ id, name, stufe, zuletzt })) });
-      } },
-      { methode: 'POST', pfad: '/hand/schluessel', schutz: F, handler: async (q, a) => {
-        if (!this.nurAndreasLoopback(q, a, 'managing agent keys is Andreas\'s')) return;
-        const k = await this.koerper(q);
-        const name = typeof k.name === 'string' ? k.name.trim() : '';
-        if (!/^[\x20-\x7e]{1,40}$/.test(name)) {
-          return this.json(a, 400, { fehler: 'name_ungueltig', text: 'the key name must be 1 to 40 printable ASCII characters' });
-        }
-        if (k.stufe !== 'lesen' && k.stufe !== 'schreiben' && k.stufe !== 'zerstoerend') {
-          return this.json(a, 400, { fehler: 'stufe_unbekannt', text: 'the level must be lesen, schreiben or zerstoerend' });
-        }
-        const neu = this.schluessel.neu(name, k.stufe);
-        this.json(a, 200, { id: neu.id, token: neu.token });
-      } },
-      { methode: 'POST', pfad: '/hand/schluessel/loeschen', schutz: F, handler: async (q, a) => {
-        if (!this.nurAndreasLoopback(q, a, 'managing agent keys is Andreas\'s')) return;
-        const id = (await this.koerper(q)).id;
-        if (typeof id !== 'string' || !this.schluessel.widerrufe(id)) return this.json(a, 404, { fehler: 'unbekannt' });
-        this.json(a, 200, { ok: true });
-      } },
-    ];
-  }
-
-  // Pairing, from the loopback page only (the tablet handler also refuses /kopplung): a one-time link, the list of paired devices, revoking one.
-  private routenKopplung(): Route[] {
-    const F = 'fremdePost' as const, O = 'offen' as const;
-    const nurAndreas = (q: http.IncomingMessage, a: http.ServerResponse): boolean => this.nurAndreasLoopback(q, a, 'pairing a device is Andreas\'s');
-    return [
-      { methode: 'GET', pfad: '/kopplung', schutz: O, handler: (q, a) => { if (nurAndreas(q, a)) this.json(a, 200, { an: this.tablet !== null, geraete: this.kopplung.liste() }); } },
-      { methode: 'POST', pfad: '/kopplung', schutz: F, handler: (q, a) => {
-        if (!nurAndreas(q, a)) return;
-        if (this.tablet === null) return this.json(a, 409, { fehler: 'tablet_aus', text: 'Tablet access is off. Turn it on with {"an": true} in ~/.config/cypherdj/tablet.json, then restart the page server.' });
-        const l = this.kopplung.neuerLink();
-        this.json(a, 200, { link: `http://${this.tablet.adresse}:${this.tablet.port}/koppeln?t=${l.token}`, bis: l.bis, sekunden: Math.round((l.bis - Date.now()) / 1000) });
-      } },
-      { methode: 'POST', pfad: '/kopplung/loeschen', schutz: F, handler: async (q, a) => {
-        if (!nurAndreas(q, a)) return;
-        const id = (await this.koerper(q)).id;
-        if (typeof id !== 'string' || !this.kopplung.widerrufe(id)) return this.json(a, 404, { fehler: 'unbekannt' });
-        this.tabletHandler?.kappe(id);
-        this.json(a, 200, { ok: true });
-      } },
-    ];
-  }
+  private offenesProjektDatei(...a: Parameters<typeof NS.offenesProjektDatei>) { return NS.offenesProjektDatei.call(this, ...a); }
+  private leseOffenesProjektDatei(...a: Parameters<typeof NS.leseOffenesProjektDatei>) { return NS.leseOffenesProjektDatei.call(this, ...a); }
+  private merkeOffenesProjekt(...a: Parameters<typeof NS.merkeOffenesProjekt>) { return NS.merkeOffenesProjekt.call(this, ...a); }
+  private projektWiederOeffnen(...a: Parameters<typeof NS.projektWiederOeffnen>) { return NS.projektWiederOeffnen.call(this, ...a); }
+  private starteTablet(...a: Parameters<typeof LB.starteTablet>) { return LB.starteTablet.call(this, ...a); }
+  private nurAndreasLoopback(...a: Parameters<typeof LB.nurAndreasLoopback>) { return LB.nurAndreasLoopback.call(this, ...a); }
+  private routenHand(...a: Parameters<typeof LB.routenHand>) { return LB.routenHand.call(this, ...a); }
+  private routenKopplung(...a: Parameters<typeof LB.routenKopplung>) { return LB.routenKopplung.call(this, ...a); }
 
   private gestoppt = false;
-  async stoppe(): Promise<void> {
-    if (this.gestoppt) return;   // zweimal (Test-Neustart und Aufräumen) darf nichts werfen
-    this.gestoppt = true;
-    const planWartete = this.offenerPlanTimer !== null, wiederLief = this.wiederTimer !== null;   // what the last write below must still know
-    if (this.planTimer) { clearTimeout(this.planTimer); this.planTimer = null; this.sichereNeustartStand(); }   // what was changed in the last 300 ms
-    this.aufnahme.aufnahme.schliesse();
-    this.stems.stems.schliesse();
-    this.noten.analyse.schliesse();
-    this.notenRender.schliesse();
-    this.tagsStopp();   // a running tag scan takes no further slice
-    await this.einsammler.schliesse();   // kills a running copy, at most 2 s
-    this.ausgabe.ausgabe.schliesse();   // Fix-Runde S3 R7: ein wartender Freeze endet jetzt mit freeze_fehler, nicht erst nach Stille oder Frist
-    await this.proj.sitzung.beende();   // plan 1.11 D8: the plugin states first (at most 3 s)
-    this.proj.sitzung.schliesse();   // D1 S2: ausstehenden Mixer-Eintrag schreiben, Projekt-Sperre frei
-    for (const l of this.spuren.values()) for (const t of l.timer) clearTimeout(t);
-    for (const s of this.stroeme) s.end();
-    for (const t of this.wartend.values()) clearTimeout(t);
-    if (this.ohrTakt) { clearInterval(this.ohrTakt); this.ohrTakt = null; }
-    if (this.graphTakt) { clearInterval(this.graphTakt); this.graphTakt = null; }
-    if (this.pumpeTimer) clearTimeout(this.pumpeTimer);
-    if (this.offenerPlanTimer) { clearTimeout(this.offenerPlanTimer); this.offenerPlanTimer = null; }   // the restore that waits for the guard time
-    if (this.wiederTimer) { clearTimeout(this.wiederTimer); this.wiederTimer = null; }
-    this.vorbereiter.stoppe();
-    await this.katalogJob.schliesse();   // browser plan 1: kills a running catalogue build, at most 2 s
-    await this.vorhoeren.ende();
-    // The awaits above take seconds while HTTP and the kern client run on: write what changed meanwhile (merkeNeustartStand holds since gestoppt).
-    // Not while the restore of an accepted restart was pending: the file keeps the old kern's stand until that restore ran, and it never will
-    if (!wiederLief) this.sichereNeustartStand(planWartete);
-    await this.kern.stoppe();
-    if (this.tabletServer) { const t = this.tabletServer; t.closeAllConnections(); await new Promise<void>((ok) => t.close(() => ok())); }
-    await new Promise<void>((ok) => (this.http ? this.http.close(() => ok()) : ok()));
-  }
-
-  private pruefmodusAusKonfig(): Pruefmodus {
-    const k = this.opt.kernPruefmodus;
-    return k === true ? 'an' : k === false ? 'aus' : 'unbekannt';
-  }
-
-  private setzePruefmodus(neu: Pruefmodus, quelle: string): void {
-    if (neu === this.pruefmodus) return;
-    this.pruefmodus = neu;
-    this.opt.log?.({ typ: 'pruefmodus', stand: neu, quelle });
-    this.verteile({ a: 'pruefmodus', f: { stand: neu, text: neu === 'aus' ? HAND_PRUEFMODUS_TEXT : '' } });
-  }
+  stoppe(...a: Parameters<typeof LB.stoppe>) { return LB.stoppe.call(this, ...a); }
+  private pruefmodusAusKonfig(...a: Parameters<typeof WI.pruefmodusAusKonfig>) { return WI.pruefmodusAusKonfig.call(this, ...a); }
+  private setzePruefmodus(...a: Parameters<typeof WI.setzePruefmodus>) { return WI.setzePruefmodus.call(this, ...a); }
 
   private vomKern(d: Dekodiert): void {
     const f = d.felder;
@@ -1067,236 +405,24 @@ export class Oberflaeche {
   private static readonly FX_ZUWEISUNG_KANAL = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2', 'master'];
   private static readonly FX3_ZUWEISUNG_KANAL = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8', 'pad/1', 'pad/2'];
   private static readonly FX_BEATS = [0.25, 0.5, 1, 2, 4, 8, 16];
-  private fx(d: Record<string, unknown>, a: http.ServerResponse): void {
-    const anteil = (x: unknown) => typeof x === 'number' && x >= 0 && x <= 1;
-    if (d.einheit !== 1 && d.einheit !== 2) return this.json(a, 400, { fehler: 'einheit' });
-    if (typeof d.art !== 'number' || !(Number.isInteger(d.art) && d.art >= 1 && d.art <= 12)) return this.json(a, 400, { fehler: 'art' });
-    if (typeof d.beats !== 'number' || !Oberflaeche.FX_BEATS.includes(d.beats)) return this.json(a, 400, { fehler: 'beats' });
-    if (!anteil(d.wet) || !anteil(d.param1) || !anteil(d.param2) || !anteil(d.param3)) return this.json(a, 400, { fehler: 'wet_param' });
-    if (typeof d.an !== 'boolean') return this.json(a, 400, { fehler: 'an' });
-    const felder = { id: Number(++this.id), quelle: this.quelle(), einheit: d.einheit, art: d.art, beats: d.beats, wet: d.wet, param1: d.param1, param2: d.param2, param3: d.param3, an: d.an ? 1 : 0 };
-    this.kern.sende('/k/fx', felder);
-    this.angefasst.add(`fx:${d.einheit}`);
-    this.fxVon(d.einheit as 1 | 2, this.quelle() as 'andreas' | 'cypher');
-    this.gesendet++;
-    this.json(a, 200, { ok: true, felder });
-  }
-  // Baukasten S16: the kern reports each graph slot (/e/graph); its word replaces what this server sent
-  private merkeGraph(kanal: string, name: string): void {
-    this.graphenVomKernMs = Date.now();
-    const vorher = this.stand.graphen_geladen[kanal] ?? '';
-    if (vorher === name) return;
-    const neu = { ...this.stand.graphen_geladen };
-    if (name === '') delete neu[kanal]; else neu[kanal] = name;
-    delete this.graphBesitzer[kanal];   // a graph this server did not load: the owner is unknown
-    this.opt.log?.({ typ: 'graph_vom_kern', kanal, vorher, name });
-    this.setzeGraphenGeladen(neu);
-  }
-  private fragGraphen(grund: string): void {
-    this.kern.sende('/k/graph/frage', { id: Number(++this.id), quelle: 'andreas' });
-    this.opt.log?.({ typ: 'graphen_frage', grund });
-  }
-  // Baukasten S12: set the loaded-graph map and push it to the pages
-  private setzeGraphenGeladen(neu: Record<string, string>): void {
-    this.stand.graphen_geladen = neu;
-    this.verteile({ a: 'graphen', f: { geladen: neu } });
-  }
-  // POST /graph {kanal, name, vorgaben?}: put a Baukasten graph on a channel or take it off (name ""). Instruments: erz/2, erz/3 through
-  // /erz/strom (bk:<name>, "bk:" removes: the kern replays the stream's last kit/midi target). Effects: deck/1..4, fx/3, fx/4, master,
-  // erz/1..3 and pad/1, pad/2 through /k/kanal/graph. A kern refusal answers 200 with the quittung (like /regler); 409 only for the Cypher pre-checks.
-  private async graphLaden(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const r = await this.graphSetzen(d, this.quelle());
-    this.json(a, r.code, r.j);
-  }
-  // S17: the body of POST /graph as a function with an explicit source, shared with the Bereich bridge (bereichKontext().baukasten)
-  // `wieder` (restore after a kern restart, graphWieder): the graph was sounding before the restart, so Cypher's pre-checks for a NEW load (kit mode, Stop
-  // Cypher, AUTO off) do not apply here; the caller decides about Stop Cypher. The channel is not marked as set again either.
-  private async graphSetzen(d: Record<string, unknown>, quelle: string, o: { wieder?: boolean } = {}): Promise<{ code: number; j: Record<string, unknown> }> {
-    const kanal = d.kanal, name = d.name;
-    if (typeof kanal !== 'string' || !GRAPH_KANAELE.includes(kanal)) return { code: 400, j: { fehler: 'ausserhalb_bereich' } };
-    if (typeof name !== 'string' || (name !== '' && !GRAPH_NAME.test(name))) return { code: 400, j: { fehler: 'name' } };
-    if (d.vorgaben !== undefined && typeof d.vorgaben !== 'boolean') return { code: 400, j: { fehler: 'vorgaben' } };
-    // Container core M9 (D2): the stream channels erz/<n> take an instrument graph (the stream of the Erzeuger) or an effect graph (a bk insert on the strom
-    // track); pad/1, pad/2 are container strips now and take effects only. The kind decides the way: the graph being loaded, on removal the one loaded now
-    // (an instrument graph of the stream, else the bk insert of its strom track).
-    const stromKanal = stromVonKanal(kanal);
-    const insertGraph = stromKanal !== null ? this.bkInsertVonStrom(stromKanal)?.graph ?? '' : '';
-    const jetzt = this.stand.graphen_geladen[kanal] || insertGraph;
-    const istInstrument = (n: string): boolean => findeGraph(n)?.art === 'instrument';
-    const neuG = name !== '' ? findeGraph(name) : null;
-    if (name !== '' && !neuG) return { code: 404, j: { fehler: 'unbekannt' } };
-    const instrument = neuG ? neuG.art === 'instrument' : jetzt !== '' ? istInstrument(jetzt)
-      : stromKanal !== null ? INSTRUMENT_KANAELE.includes(kanal) : !EFFEKT_KANAELE.includes(kanal);
-    const erz = instrument && INSTRUMENT_KANAELE.includes(kanal);
-    if (instrument && kanal === 'erz/1') return { code: 400, j: { fehler: 'kein_midi_strom', text: 'stream 1 runs a drum kit: its notes are kit indices, an instrument graph would get them as MIDI notes' } };
-    if (instrument && /^pad\//.test(kanal)) return { code: 400, j: { fehler: 'ausserhalb_bereich', text: `${kanal} is a container strip: instrument graphs run on the stream channels erz/<n>` } };
-    if (neuG && !(instrument ? INSTRUMENT_KANAELE : EFFEKT_KANAELE).includes(kanal)) return { code: 400, j: { fehler: 'falsche_art', art: neuG.art } };
-    // one graph per channel: an effect does not go onto a channel whose stream plays an instrument graph, nor the other way round (on erz/<n> the effect side is the bk insert)
-    if (neuG && jetzt !== '' && jetzt !== name && istInstrument(jetzt) !== instrument) {
-      return { code: 409, j: { fehler: 'belegt', kanal, graph: jetzt, text: `${kanal} carries the ${instrument ? 'effect' : 'instrument'} graph ${jetzt}: take it off first` } };
-    }
-    const strom = erz ? (stromKanal as number) : 0;
-    // S15 (break 7): a stream whose erzeuger runs in kit mode sends kit indices, a graph would get wrong or no notes. Unknown mode passes.
-    // Cypher is refused; Andreas's own page loads and gets a warning (no lock in his tools without his yes).
-    let warnung: string | undefined;
-    if (erz && name !== '' && leseMusterStand(this.musterOrdner(strom)).status?.noten === 'kit') {
-      const text = `stream ${strom} runs in kit mode (notes are kit indices): load the instruments first (tool instrumente, or djk-instrumente --instanz <i>), then load the graph`;
-      if (quelle === 'cypher' && !o.wieder) return { code: 400, j: { fehler: 'kein_midi_strom', strom, text } };
-      warnung = text;
-    }
-    if (quelle === 'cypher' && !o.wieder) {
-      if (this.kiGestoppt) return { code: 409, j: { fehler: 'ki_gestoppt' } };
-      if (erz && !leseMusterStand(this.musterOrdner(strom)).autonom) return { code: 409, j: { fehler: 'auto_aus', strom, text: 'AUTO is off: Andreas holds this stream' } };
-    }
-    // S18: streams 5..10 are played by the multi-stream erzeuger (djk/start/djk-stroeme). Without a fresh heartbeat nobody would
-    // play the graph: say so instead of loading a silent one. Taking a graph off never needs the process (the kern replays the stored target).
-    if (erz && name !== '' && istBkStrom(strom) && !this.erzeugerLebt(strom)) {
-      return { code: 409, j: { fehler: 'kein_erzeuger', strom, text: `no erzeuger process serves stream ${strom} (${kanal}); start it with djk/start/djk-stroeme${instanz() ? ` --instanz ${instanz()}` : ''}` } };
-    }
-    // An effect graph on a stream channel is a project edit (bk insert on the strom track), not a message to the core
-    if (!instrument && stromKanal !== null) return this.graphAlsInsert(stromKanal, kanal, name, quelle === 'cypher' ? 'cypher' : 'andreas');
-    // Graph defaults: the rows of the knobs the graph defines go to the kern, at their `vorgabe`, in ONE batch (KernWeg.setzeRegler, like the project restore) and
-    // the load message follows only after the end status of the last row: a part carries a start beat a few ms ahead, the load message none, so without the wait the
-    // kern would hand the old rows to the new graph at attach time. Only when the graph name changes (reloading the same graph or unloading leaves every
-    // knob alone) and not when the caller sets its own rows (project restore: vorgaben false). `vorher` = the channel's current values, for the rollback below.
-    let vorher: { pfad: string; wert: number }[] = [];
-    if (name !== '' && d.vorgaben !== false && name !== this.stand.graphen_geladen[kanal] && this.kern.zustand === 'verbunden') vorher = await this.schiebeVorgaben(kanal, name, quelle);
-    const id = Number(++this.id);
-    if (!o.wieder) this.angefasst.add(`graph:${kanal}`);   // set again since the last restore plan: a pending restore leaves this channel alone
-    if (erz) this.kern.sende('/erz/strom', { id, quelle, strom, ziel: `bk:${name}` });
-    else this.kern.sende('/k/kanal/graph', { id, quelle, kanal, name });
-    this.gesendet++;
-    const quittung = await this.warteQuittung(id, undefined, false, 4000);   // a sampler graph loads up to 64 MiB in the net thread before it answers
-    if (quittung && [2, 3, 5].includes(quittung.status)) {   // /k/kanal/graph answers 1, 2, 3 at once and the wait can return on the 2 (measured on d)
-      const neu = { ...this.stand.graphen_geladen };
-      if (name === '') delete neu[kanal]; else neu[kanal] = name;
-      this.setzeGraphenGeladen(neu);
-      if (name === '') delete this.graphBesitzer[kanal]; else this.graphBesitzer[kanal] = quelle;   // after the push: merkeGraph is not involved here
-      this.merkeNeustartStand();
-    } else if (quittung && GRAPH_ABGELEHNT.includes(quittung.status) && vorher.length) {
-      // an explicit refusal: the running graph keeps its own values, not the defaults of the graph that was refused (no answer at all keeps the pushed rows:
-      // the load may still happen, the page's graph list shows the truth)
-      await this.kernWeg().setzeRegler(vorher.map((z) => ({ pfad: z.pfad, wert: z.wert })), quelle === 'cypher' ? 'cypher' : 'andreas');   // waits for the end status as well
-    }
-    // an instrument graph sounds in a container only through a strom track that reads its stream: say so when none does (a hint, not a refusal)
-    const ohneSpur = erz && name !== '' && !this.stromSpurDa(strom);
-    return { code: 200, j: { ok: true, kanal, name, quittung, ...(warnung ? { warnung } : {}), ...(ohneSpur ? { hinweis: 'kein_strudel_modul' } : {}) } };
-  }
-  // The strom track of stream n in a placed strudel module of the open live project (none: no strudel module, or no track for the stream yet)
-  private stromSpurDa(strom: number): boolean {
-    const o = this.proj.zugang.offen();
-    if (!o?.projekt.live) return false;
-    const g = strudelGruppe(o.projekt);
-    return !!g && platzVonGruppe(o.projekt, g.id) !== null && stromSpur(o.projekt, strom) !== null;
-  }
-  // The bk insert (effect graph) on the strom track of stream n, if any
-  private bkInsertVonStrom(strom: number): { id: string; graph: string; pos: number; spur_id: string } | null {
-    const o = this.proj.zugang.offen();
-    const s = o ? stromSpur(o.projekt, strom) : undefined;
-    const pos = s?.inserts?.findIndex((i) => i.art === 'bk') ?? -1;
-    return s && pos >= 0 ? { id: s.inserts![pos].id, graph: s.inserts![pos].graph ?? '', pos, spur_id: s.id } : null;
-  }
-  // Effect graph on erz/<n> (D2): a bk insert on the strom track as ONE project step of the caller (undo removes it); name '' removes the insert.
-  // Needs the strudel module (kein_strudel_modul) and creates the strom track on demand, like POST /strudel. The restore after a core restart does not
-  // replay it: the project translator carries inserts. graphen_geladen holds no entry for it (the project is the truth).
-  private async graphAlsInsert(strom: number, kanal: string, name: string, quelle: 'andreas' | 'cypher'): Promise<{ code: number; j: Record<string, unknown> }> {
-    const o = this.proj.zugang.offen();
-    if (!o || o.projekt.live !== true) return { code: 409, j: { fehler: 'kein_liveprojekt', text: 'an effect graph on a stream is an insert of its strom track in the live project' } };
-    const modul = strudelGruppe(o.projekt);
-    if (!modul || platzVonGruppe(o.projekt, modul.id) === null) return { code: 409, j: { fehler: 'kein_strudel_modul', strom, text: 'no place holds the strudel module; place it with POST /plaetze' } };
-    const da = this.bkInsertVonStrom(strom);
-    if (name === '') {
-      if (!da) return { code: 200, j: { ok: true, kanal, name: '', entfernt: false } };
-      const r = await this.proj.sitzung.aendern({ rev: o.projekt.rev, label: `Strom ${strom} graph off`, befehle: [{ befehl: 'insert_entfernen', insert_id: da.id }] }, quelle);
-      return r.code === 200 ? { code: 200, j: { ok: true, kanal, name: '', entfernt: true } } : { code: r.code, j: r.j };
-    }
-    if (da?.graph === name) return { code: 200, j: { ok: true, kanal, name, insert_id: da.id, unveraendert: true } };
-    try { await this.sorgeFuerStromSpur(strom, quelle); } catch (e) { const r = alsAntwort(e, this.bereichKontext()); return { code: r.code, j: r.j }; }
-    const jetztOffen = this.proj.zugang.offen()!;
-    const spur = stromSpur(jetztOffen.projekt, strom)!;
-    const bk = this.bkInsertVonStrom(strom);
-    const befehl = bk ? { befehl: 'insert_setzen', strang_id: spur.id, pos: bk.pos, art: 'bk', graph: name, ersetzen: true }
-      : { befehl: 'insert_setzen', strang_id: spur.id, pos: (spur.inserts ?? []).length, art: 'bk', graph: name };
-    const r = await this.proj.sitzung.aendern({ rev: jetztOffen.projekt.rev, label: `Strom ${strom} graph ${name}`, befehle: [befehl] }, quelle);
-    if (r.code !== 200) return { code: r.code, j: r.j };
-    return { code: 200, j: { ok: true, kanal, name, insert_id: this.bkInsertVonStrom(strom)?.id ?? null } };
-  }
-  // The `vorgabe` rows of graph `name` on `kanal` as one batch, waited for until the end status of every row; returns the channel's current values of these rows
-  // (0.5 = the kern's table default where the page has no report yet), empty when nothing was sent.
-  private async schiebeVorgaben(kanal: string, name: string, quelle: string): Promise<{ pfad: string; wert: number }[]> {
-    const b = reglerVonGraph(name);
-    if (!b) return [];
-    const strom = stromVonKanal(kanal);   // the knobs of a stream's instrument graph are the rows strom/<n>/bk/<k> (container core M9)
-    const neu = Object.entries(b).map(([nr, r]) => ({ pfad: `${strom !== null ? `strom/${strom}` : kanal}/bk/${nr}`, wert: r.vorgabe })).filter((z) => PFAD.test(z.pfad));
-    if (!neu.length) return [];
-    const alt = neu.map((z) => ({ pfad: z.pfad, wert: this.stand.regler[z.pfad] ?? 0.5 }));
-    await this.kernWeg().setzeRegler(neu, quelle === 'cypher' ? 'cypher' : 'andreas');
-    return alt;
-  }
+  private fx(...a: Parameters<typeof GF.fx>) { return GF.fx.call(this, ...a); }
+  private merkeGraph(...a: Parameters<typeof GF.merkeGraph>) { return GF.merkeGraph.call(this, ...a); }
+  private fragGraphen(...a: Parameters<typeof GF.fragGraphen>) { return GF.fragGraphen.call(this, ...a); }
+  private setzeGraphenGeladen(...a: Parameters<typeof GF.setzeGraphenGeladen>) { return GF.setzeGraphenGeladen.call(this, ...a); }
+  private graphLaden(...a: Parameters<typeof GF.graphLaden>) { return GF.graphLaden.call(this, ...a); }
+  private graphSetzen(...a: Parameters<typeof GF.graphSetzen>) { return GF.graphSetzen.call(this, ...a); }
+  private stromSpurDa(...a: Parameters<typeof GF.stromSpurDa>) { return GF.stromSpurDa.call(this, ...a); }
+  private bkInsertVonStrom(...a: Parameters<typeof GF.bkInsertVonStrom>) { return GF.bkInsertVonStrom.call(this, ...a); }
+  private graphAlsInsert(...a: Parameters<typeof GF.graphAlsInsert>) { return GF.graphAlsInsert.call(this, ...a); }
+  private schiebeVorgaben(...a: Parameters<typeof GF.schiebeVorgaben>) { return GF.schiebeVorgaben.call(this, ...a); }
   private kernWegInstanz: KernWeg | null = null;
-  private kernWeg(): KernWeg {
-    // KernWeg only reads the clock (beat, bpm) of its lage: this server keeps it in kern.uhr
-    const uhr = this;
-    this.kernWegInstanz ??= new KernWeg(this.bereichKontext(), { get uhr() { return (uhr.kern.uhr as { beat: number; bpm: number } | null) ?? null; } } as unknown as KernLage);
-    return this.kernWegInstanz;
-  }
-  // Plan Hand T7 (Review M3): Cyphers FX nur bei AUTO an und ohne Stop Cypher (der Kern nimmt /k/fx auch gestoppt an)
-  private fxRiegel(a: http.ServerResponse): boolean {
-    if (this.quelle() !== 'cypher') return false;
-    if (this.kiGestoppt) { this.json(a, 409, { fehler: 'ki_gestoppt' }); return true; }
-    if (!leseMusterStand(this.musterOrdner()).autonom) { this.json(a, 409, { fehler: 'auto_aus' }); return true; }
-    return false;
-  }
-  // Ohr T18: /k/fx/routing an den Kern; gibt die Kennung zurück
-  private fxRoutingSenden(routing: 'post_fader' | 'insert', quelle: string): { id: number; quelle: string; routing: number } {
-    const felder = { id: Number(++this.id), quelle, routing: routing === 'insert' ? 1 : 0 };
-    this.kern.sende('/k/fx/routing', felder);
-    this.gesendet++;
-    return felder;
-  }
-  private fxZuweisung(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (d.einheit !== 1 && d.einheit !== 2 && d.einheit !== 3) return this.json(a, 400, { fehler: 'einheit' });
-    const erlaubt = d.einheit === 3 ? Oberflaeche.FX3_ZUWEISUNG_KANAL : Oberflaeche.FX_ZUWEISUNG_KANAL;
-    if (typeof d.kanal !== 'string' || !erlaubt.includes(d.kanal)) return this.json(a, 400, { fehler: 'kanal' });
-    if (typeof d.an !== 'boolean') return this.json(a, 400, { fehler: 'an' });
-    const felder = { id: Number(++this.id), quelle: this.quelle(), einheit: d.einheit, kanal: d.kanal, an: d.an ? 1 : 0 };
-    this.kern.sende('/k/fx/zuweisung', felder);
-    this.angefasst.add(`fx:${d.einheit}`);
-    this.fxVon(d.einheit as 1 | 2 | 3, this.quelle() as 'andreas' | 'cypher');
-    this.gesendet++;
-    this.json(a, 200, { ok: true, felder });
-  }
-
-  // Wer eine Einheit zuletzt gesetzt hat (fx_von.json im Muster-Ordner, je Einheit ein Schlüssel "1"/"2"): die
-  // Seite schreibt andreas, djk-fx (Slice 4) cypher.
-  private fxVon(einheit: 1 | 2 | 3, von?: 'andreas' | 'cypher'): string | null {
-    const datei = path.join(this.musterOrdner(), 'fx_von.json');
-    let stand: Record<string, { von: string; zeit: number }> = {};
-    try { stand = JSON.parse(fs.readFileSync(datei, 'utf8')); } catch { /* noch keine Datei */ }
-    if (von) {
-      stand[String(einheit)] = { von, zeit: Date.now() };
-      try { fs.mkdirSync(this.musterOrdner(), { recursive: true }); fs.writeFileSync(datei, JSON.stringify(stand)); } catch { /* ohne Datei: AUTO aus lässt sie stehen */ }
-      return von;
-    }
-    return stand[String(einheit)]?.von ?? null;
-  }
-
-  // AUTO aus (Andreas 2026-09-28: „effekte laufen besser immer aus“): je Einheit klingt ein laufender, von Cypher
-  // gesetzter Effekt aus; einen von Andreas gesetzten fasst das nicht an. Beide Einheiten unabhängig geprüft.
-  private fxCypherAuslaufen(): void {
-    for (const einheit of [1, 2] as const) {
-      const f = this.stand.fx[einheit - 1] as Record<string, unknown> | null;
-      if (!f || f.an !== 1 || this.fxVon(einheit) !== 'cypher') continue;
-      const felder = { id: Number(++this.id), quelle: this.quelle(), einheit, art: f.art, beats: f.beats, wet: f.wet, param1: f.param1, param2: f.param2, param3: f.param3, an: 0 };
-      this.kern.sende('/k/fx', felder);
-      this.gesendet++;
-      this.opt.log?.({ typ: 'fx_auslaufen', einheit });
-    }
-  }
-
-  // ---------- Plan E9: Deck-Bedienung (Sprung, Hotcues SHOT/LOOP, Loop) über /k/deck/* mit Quelle andreas ----------
-  // Review E9 F3: je Instanz ein eigener Ordner (Prüfinstanz in /dev/shm wie die Loops), sonst teilen Prüfung und Betrieb
-  private hotcueOrdner(): string { return this.opt.hotcueOrdner ?? hotcueOrdnerVorgabe(); }
+  private kernWeg(...a: Parameters<typeof GF.kernWeg>) { return GF.kernWeg.call(this, ...a); }
+  private fxRiegel(...a: Parameters<typeof GF.fxRiegel>) { return GF.fxRiegel.call(this, ...a); }
+  private fxRoutingSenden(...a: Parameters<typeof GF.fxRoutingSenden>) { return GF.fxRoutingSenden.call(this, ...a); }
+  private fxZuweisung(...a: Parameters<typeof GF.fxZuweisung>) { return GF.fxZuweisung.call(this, ...a); }
+  private fxVon(...a: Parameters<typeof GF.fxVon>) { return GF.fxVon.call(this, ...a); }
+  private fxCypherAuslaufen(...a: Parameters<typeof GF.fxCypherAuslaufen>) { return GF.fxCypherAuslaufen.call(this, ...a); }
+  private hotcueOrdner(...a: Parameters<typeof DK.hotcueOrdner>) { return DK.hotcueOrdner.call(this, ...a); }
   private readonly einsCache = new Map<string, { eins: number; erster: number }>();
 
   // D1 S3 Auftrag 15 (Abnahme A0b, gemessen: jedes 409 von GET /deck/raster kam, bevor der Server /zustand/deck für das Deck hatte; die Uhr war da):
@@ -1308,118 +434,15 @@ export class Oberflaeche {
   // darauf nachgezogen (auch für das Wiedersenden nach /e/neustart), Status 0 heißt leer und leert stand.geladen.
   private readonly geladenSeit: Record<string, { vorher: string | null; bestaetigt: boolean }> = {};
   private static deckSchluessel(x: Record<string, unknown>): string { return `${String(x.material_id)}|${Number(x.basis_bpm)}|${Number(x.fassung)}`; }
-  private zieheGeladenNach(z: Record<string, unknown>): void {
-    const n = String(z.deck), g = this.stand.geladen[n] as Record<string, unknown> | undefined;
-    if (!g) return;
-    const seit = this.geladenSeit[n] ?? { vorher: null, bestaetigt: true }, kz = Oberflaeche.deckSchluessel(z), leer = !(Number(z.status) >= 1);
-    if (kz === Oberflaeche.deckSchluessel(g)) {
-      if (leer) { delete this.stand.geladen[n]; delete this.geladenSeit[n]; } else this.geladenSeit[n] = { vorher: null, bestaetigt: true };
-      return;
-    }
-    if (!seit.bestaetigt && kz === seit.vorher) return;                   // noch das vorige Material: das neue Laden gilt
-    if (leer) { delete this.stand.geladen[n]; delete this.geladenSeit[n]; return; }
-    this.stand.geladen[n] = { deck: z.deck, material_id: z.material_id, basis_bpm: z.basis_bpm, fassung: z.fassung } as Felder;
-    this.geladenSeit[n] = { vorher: null, bestaetigt: true };
-  }
-
-  private rasterFassung(deck: number): Fassung | null {
-    if (!istOffenesDeck(deck)) return null;
-    const z = this.stand.decks[String(deck)] as Record<string, unknown> | undefined;
-    const g = this.stand.geladen[String(deck)] as Record<string, unknown> | undefined;
-    const fassung = (x: Record<string, unknown>): Fassung => ({ material_id: String(x.material_id), basis_bpm: Number(x.basis_bpm), fassung: Number(x.fassung) });
-    if (g && (!z || String(z.material_id) !== String(g.material_id))) return fassung(g);
-    return z && Number(z.status) >= 1 ? fassung(z) : null;
-  }
-
-  // Kern-Stand eines geladenen Decks (1, 2): /zustand/deck, /uhr, Fassung und ihre Takt-Eins. null: nicht bedienbar.
-  private deckStand(deck: unknown): { deck: number; z: Record<string, unknown>; beat: number; bpm: number; f: Fassung; eins: number; erster: number } | null {
-    if (!istOffenesDeck(deck)) return null;
-    const z = this.stand.decks[String(deck)] as Record<string, unknown> | undefined;
-    const u = this.kern.uhr;
-    if (!z || !u || !(Number(z.status) >= 1)) return null;
-    const f: Fassung = { material_id: String(z.material_id), basis_bpm: Number(z.basis_bpm), fassung: Number(z.fassung) };
-    const schluessel = `${f.material_id}|${f.basis_bpm}|${f.fassung}`;
-    let e = this.einsCache.get(schluessel);
-    if (e === undefined) {
-      try {
-        const q = fassungQuelle(this.opt.bestand, f.material_id, f.basis_bpm, f.fassung);
-        const j = JSON.parse(fs.readFileSync(path.join(path.dirname(q.datei), 'fassung.json'), 'utf8')) as Record<string, unknown>;
-        e = { eins: Number(j.erste_eins_quell_beat) || 0, erster: Number(j.erster_schlag_frame) || 0 };
-      } catch { e = { eins: 0, erster: 0 }; }
-      this.einsCache.set(schluessel, e);
-    }
-    return { deck, z, beat: u.beat, bpm: u.bpm, f, eins: e.eins, erster: e.erster };
-  }
-
-  // Ziel-Beat (D3): jetzt + Vorlauf (vorlauf_ms, mindestens 0,1 Beat: /uhr ist bis zu einem Zyklus alt), aufs Raster.
-  // Review E9 F1: ein stehendes Deck wartet nicht auf die Rasterstelle (dort rastet nur das Ziel ein); sonst drückt
-  // Andreas in der Wartezeit Play, und das für das stehende Deck gerechnete Delta landet daneben.
-  private zeitRaster(st: { z: Record<string, unknown> }, raster: number): number { return Number(st.z.status) >= 2 ? raster : 0; }
-  private deckAb(st: { z: Record<string, unknown>; beat: number; bpm: number }, raster: number): number {
-    const vorlauf = Math.max(Number(st.z.vorlauf_ms ?? 0) / 1000 * st.bpm / 60, 0.1);
-    return abBeat(st.beat, vorlauf, this.zeitRaster(st, raster));
-  }
-
-  private deckTeil(adresse: string, st: { deck: number; z: Record<string, unknown> }, ab: number, raster: number, extra: Record<string, unknown>): Record<string, unknown> {
-    const r = this.zeitRaster(st, raster);
-    const felder = { id: Number(++this.id), quelle: this.quelle(), plan: this.planVon(), gruppe: '', hoerschein: '', deck: st.deck, ab_beat: ab,
-      ...extra, politik: r > 0 ? 2 : 1, raster_beats: r > 0 ? r : 0 };
-    this.kern.sende(adresse, felder);
-    this.gesendet++;
-    return felder;
-  }
-
-  private rasterAus(d: Record<string, unknown>): number | null {
-    const r = d.raster ?? 0;
-    return typeof r === 'number' && (RASTER_WAHL as readonly number[]).includes(r) ? r : null;
-  }
-
-  // Sprung (D4): {deck, ziel (Quell-Beat) | delta, raster}
-  private deckSprung(d: Record<string, unknown>, a: http.ServerResponse): void {
-    const raster = this.rasterAus(d);
-    if (raster === null) return this.json(a, 400, { fehler: 'raster' });
-    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
-    const st = this.deckStand(d.deck);
-    if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
-    const ab = this.deckAb(st, raster);
-    let delta: number;
-    if (typeof d.ziel === 'number' && Number.isFinite(d.ziel)) {
-      delta = sprungDelta({ laeuft: Number(st.z.status) >= 2, quell: Number(st.z.quell_beat), beat: st.beat, ab, ziel: d.ziel, raster, eins: st.eins });
-    } else if (typeof d.delta === 'number' && Number.isFinite(d.delta)) {
-      delta = d.delta;
-    } else {
-      return this.json(a, 400, { fehler: 'ziel_oder_delta' });
-    }
-    // Der Kern verschiebt einen scharfen Loop beim Sprung mit (core_deck.cpp art 6: loop_a += llround(delta · fpb), deck.cpp springe);
-    // das Loop-Gedächtnis zieht um dasselbe Delta nach (llround(delta · fpb) / fpb, wie der Kern in Frames rechnet). Lehnt der Kern ab
-    // (ausserhalb_bereich: der Loop ginge aus dem Material), bleibt sein Loop stehen: dann Rücknahme.
-    const l = this.loopVon(st) ? this.aktiverLoop[String(st.deck)] : undefined;
-    let schritt = 0;
-    if (l) {
-      const fpb = 48000 * 60 / st.f.basis_bpm;
-      schritt = Math.round(delta * fpb) / fpb;
-      this.setzeAktivenLoop(st.deck, { ...l, start: l.start + schritt });
-    }
-    const felder = this.deckTeil('/k/deck/sprung', st, ab, raster, { delta_beats: delta });
-    if (l) {
-      void this.warteBisAb(Number(felder.id), ab).then((q) => {
-        const jetzt = this.aktiverLoop[String(st.deck)];
-        if (q && GRAPH_ABGELEHNT.includes(q.status) && jetzt) this.setzeAktivenLoop(st.deck, { ...jetzt, start: jetzt.start - schritt });
-      });
-    }
-    this.json(a, 200, { ok: true, felder });
-  }
-
-  // Hörbares Ziehen (2026-10-17): {deck, phase 0 los | 1 Griff | 2 Zug, delta (Quell-Beats seit dem Griff)}. Der Kern liest das Material
-  // an der Handposition; der Strom (~60 Hz) wird nicht quittiert und nicht gezählt, nur gesendet.
-  private deckScrub(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
-    if (d.phase !== 0 && d.phase !== 1 && d.phase !== 2) return this.json(a, 400, { fehler: 'phase' });
-    if (typeof d.delta !== 'number' || !Number.isFinite(d.delta) || Math.abs(d.delta) > 100000) return this.json(a, 400, { fehler: 'delta' });
-    const felder = { id: Number(++this.id), quelle: this.quelle(), deck: d.deck, phase: d.phase, delta_beats: d.delta };
-    this.kern.sende('/k/deck/scrub', felder);
-    this.json(a, 200, { ok: true });
-  }
+  private zieheGeladenNach(...a: Parameters<typeof DK.zieheGeladenNach>) { return DK.zieheGeladenNach.call(this, ...a); }
+  private rasterFassung(...a: Parameters<typeof DK.rasterFassung>) { return DK.rasterFassung.call(this, ...a); }
+  private deckStand(...a: Parameters<typeof DK.deckStand>) { return DK.deckStand.call(this, ...a); }
+  private zeitRaster(...a: Parameters<typeof DK.zeitRaster>) { return DK.zeitRaster.call(this, ...a); }
+  private deckAb(...a: Parameters<typeof DK.deckAb>) { return DK.deckAb.call(this, ...a); }
+  private deckTeil(...a: Parameters<typeof DK.deckTeil>) { return DK.deckTeil.call(this, ...a); }
+  private rasterAus(...a: Parameters<typeof DK.rasterAus>) { return DK.rasterAus.call(this, ...a); }
+  private deckSprung(...a: Parameters<typeof DK.deckSprung>) { return DK.deckSprung.call(this, ...a); }
+  private deckScrub(...a: Parameters<typeof DK.deckScrub>) { return DK.deckScrub.call(this, ...a); }
 
   private static readonly LOOP_LAENGEN = [1, 2, 4, 8, 16, 32, 64];   // beats; every length divides 64
   // Zuletzt an den Kern geschickter Deck-Loop je Deck (Quell-Beat des Starts, Länge), für „leeres Pad im Loop = Loop-Cue“.
@@ -1429,302 +452,33 @@ export class Oberflaeche {
   private static loopScharf(z: Record<string, unknown>): boolean {
     return Number(z.status) === 3 || (Number(z.status) >= 1 && z.beats_bis_ende === Infinity);   // Kern: im Loop INFINITY (deck.cpp)
   }
-  private loopVon(st: { deck: number; z: Record<string, unknown>; f: Fassung }): { start: number; laenge: number } | null {
-    const l = this.aktiverLoop[String(st.deck)];
-    return l && l.schluessel === Oberflaeche.fassungSchluessel(st.f) && Oberflaeche.loopScharf(st.z) ? { start: l.start, laenge: l.laenge } : null;
-  }
-  private merkeLoop(st: { deck: number; z: Record<string, unknown>; beat: number; f: Fassung }, ab: number, laenge: number): void {
-    if (!(laenge > 0)) { delete this.aktiverLoop[String(st.deck)]; this.sichereAktiveLoops(); return; }
-    const q = Number(st.z.quell_beat), start = Number(st.z.status) >= 2 ? q + (ab - st.beat) : q;
-    this.setzeAktivenLoop(st.deck, { schluessel: Oberflaeche.fassungSchluessel(st.f), start, laenge });
-  }
-  private setzeAktivenLoop(deck: number, l: { schluessel: string; start: number; laenge: number }): void {
-    this.aktiverLoop[String(deck)] = l;
-    this.sichereAktiveLoops();
-  }
-  // Der gemerkte Loop liegt auf Platte neben den Hotcues (Andreas 2026-09-28: nach einem Neustart des Seiten-Servers
-  // kannte das Pad den laufenden Loop nicht mehr). Gültig bleibt er nur, solange der Kern ihn noch hält (loopVon).
-  private aktiveLoopsDatei(): string { return path.join(this.hotcueOrdner(), 'aktive_loops.json'); }
-  private sichereAktiveLoops(): void {
-    try {
-      fs.mkdirSync(this.hotcueOrdner(), { recursive: true });
-      const tmp = `${this.aktiveLoopsDatei()}.${process.pid}.neu`;
-      fs.writeFileSync(tmp, JSON.stringify(this.aktiverLoop));
-      fs.renameSync(tmp, this.aktiveLoopsDatei());
-    } catch (err) { this.opt.log?.({ typ: 'aktive_loops_nicht_gesichert', text: (err as Error).message }); }
-  }
-  ladeAktiveLoops(): void {
-    try { this.aktiverLoop = JSON.parse(fs.readFileSync(this.aktiveLoopsDatei(), 'utf8')); } catch { this.aktiverLoop = {}; }
-  }
-  // t_7f487235: the memory of the restore plan (FX type of units 1/2, FX assignments 1-3, loop boxes with owner and live offset, graphs with owner) on disk
-  // next to aktive_loops.json, written the same way (temp file, rename), so a restart of the page server does not lose what the plan after a kern restart
-  // is made of. Read on start into vomPlatte; the first word of the kern decides what becomes of it (vomKern). A missing or corrupt file is no stand.
-  private neustartStandDatei(): string { return path.join(this.hotcueOrdner(), 'neustart_stand.json'); }
+  private loopVon(...a: Parameters<typeof DK.loopVon>) { return DK.loopVon.call(this, ...a); }
+  private merkeLoop(...a: Parameters<typeof DK.merkeLoop>) { return DK.merkeLoop.call(this, ...a); }
+  private setzeAktivenLoop(...a: Parameters<typeof DK.setzeAktivenLoop>) { return DK.setzeAktivenLoop.call(this, ...a); }
+  private aktiveLoopsDatei(...a: Parameters<typeof DK.aktiveLoopsDatei>) { return DK.aktiveLoopsDatei.call(this, ...a); }
+  private sichereAktiveLoops(...a: Parameters<typeof DK.sichereAktiveLoops>) { return DK.sichereAktiveLoops.call(this, ...a); }
+  ladeAktiveLoops(...a: Parameters<typeof DK.ladeAktiveLoops>) { return DK.ladeAktiveLoops.call(this, ...a); }
+  private neustartStandDatei(...a: Parameters<typeof NS.neustartStandDatei>) { return NS.neustartStandDatei.call(this, ...a); }
   private vomPlatte: NeustartStand | null = null;
   private kernSample: number | null = null;   // the sample position of the kern's last greeting: the file keeps it to tell another kern life
   private planTimer: ReturnType<typeof setTimeout> | null = null;
-  ladeNeustartStand(): void {
-    let text: string | null = null;
-    try { text = fs.readFileSync(this.neustartStandDatei(), 'utf8'); } catch { /* noch keine Datei */ }
-    const p = leseNeustartStand(text);
-    // The kern's state lives in /dev/shm: after a reboot (or djk-stop, which removes the file with it) no kern life exists that a file of before could belong to
-    const start = this.opt.systemstartMs ?? systemstartMs();
-    const grund = p === null ? null : p.geschrieben === undefined ? 'ohne_zeit' : p.geschrieben < start - NEUSTART_STAND_TOLERANZ_MS ? 'vor_systemstart' : null;
-    if (p !== null && grund !== null) this.opt.log?.({ typ: 'neustart_stand_verworfen', grund, geschrieben: p.geschrieben ?? null, systemstart: start });
-    this.vomPlatte = grund === null ? p : null;
-  }
-  private uebernehmeNeustartStand(p: NeustartStand, gleicheGeneration: boolean): void {
-    this.stand.fx = p.fx as (Felder | null)[];
-    this.stand.fxZuweisung = p.fxZuweisung;
-    this.stand.graphen_geladen = { ...p.graphen_geladen };
-    for (const [o, q] of [[this.graphBesitzer, p.graphBesitzer]] as const) { for (const k of Object.keys(o)) delete o[k]; Object.assign(o, q); }
-    if (p.plan) {
-      this.offenerPlan = { fx: p.plan.fx.map((u) => ({ ...u, felder: u.felder as Felder })), fx3: p.plan.fx3, graphen: p.plan.graphen };
-      if (gleicheGeneration && p.plan.faellig < Date.now() - NEUSTART_PLAN_VERSPAETUNG_MS) {
-        // the page was away past the due time: the moment is gone, only the owners stay
-        this.offenerPlan = null;
-        this.opt.log?.({ typ: 'neustart_plan_verworfen', grund: 'ueberfaellig', faellig: p.plan.faellig });
-      } else if (gleicheGeneration) {   // the kern the plan waited for: the same delayed restore, filtered by what the file kept, no later than due
-        this.letzteBoxFxWieder = p.plan.faellig - Oberflaeche.BOX_FX_SPERRE_MS - 500;
-        this.planNachholen(Math.max(500, p.plan.faellig - Date.now()));
-      }
-    }
-    this.opt.log?.({ typ: 'neustart_stand_gelesen', generation: p.generation, plan: p.plan !== undefined });
-  }
-  // Called at every change of one of those memories; the write is coalesced (a knob turned on an FX unit echoes /e/fx many times a second)
-  merkeNeustartStand(): void {
-    if (this.planTimer || this.gestoppt) return;
-    this.planTimer = setTimeout(() => { this.planTimer = null; this.sichereNeustartStand(); }, 300);
-    this.planTimer.unref?.();
-  }
-  // The plan that waits for the guard time, as the file keeps it: without what was touched since (the marks do not survive a restart of this server)
-  private planFuerPlatte(wartet = this.offenerPlanTimer !== null): NeustartPlan | null {
-    const p = this.offenerPlan;
-    if (!p || !wartet) return null;
-    const an = (k: string) => this.angefasst.has(k);
-    return { faellig: this.offenerPlanFaellig,
-      fx: p.fx.filter((u) => !an(`fx:${u.einheit}`)), fx3: an('fx:3') ? null : p.fx3, graphen: p.graphen.filter((g) => !an(`graph:${g.kanal}`)) };
-  }
-  // After a restore was sent: at once, not after the coalescing. Until then the file holds the old generation, and a crash of this server without a stop
-  // would read it as "kern restarted again" and send the same restore twice
-  private sichereNeustartStandSofort(): void {
-    if (this.planTimer) { clearTimeout(this.planTimer); this.planTimer = null; }
-    this.sichereNeustartStand();
-  }
-  private sichereNeustartStand(planWartete?: boolean): void {
-    // Not before a kern has spoken (the file of the last run must not be overwritten by an empty stand) and not in the 500 ms before an accepted restore ran:
-    // until then the file keeps the stand of the old kern, so a crash in between loses nothing. During the longer wait for the guard time it IS written, with
-    // the current generation and the part of the plan that is still due, so a page restart inside the wait arms the same delayed restore.
-    if (this.generation === null || this.vomPlatte !== null || this.wiederTimer) return;
-    try {
-      fs.mkdirSync(this.hotcueOrdner(), { recursive: true });
-      const tmp = `${this.neustartStandDatei()}.${process.pid}.neu`;
-      const roh = { v: 1, generation: this.generation, sample: this.kernSample, geschrieben: Date.now(), plan: this.planFuerPlatte(planWartete),
-        fx: this.stand.fx, fxZuweisung: this.stand.fxZuweisung,
-        graphBesitzer: this.graphBesitzer, graphen_geladen: this.stand.graphen_geladen };
-      fs.writeFileSync(tmp, JSON.stringify(roh, (_k, v) => (typeof v === 'bigint' ? Number(v) : v)));
-      fs.renameSync(tmp, this.neustartStandDatei());
-    } catch (err) { this.opt.log?.({ typ: 'neustart_stand_nicht_gesichert', text: (err as Error).message }); }
-  }
-  private deckLoop(d: Record<string, unknown>, a: http.ServerResponse): void {
-    const raster = this.rasterAus(d);
-    if (raster === null) return this.json(a, 400, { fehler: 'raster' });
-    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
-    if (typeof d.laenge !== 'number' || !(d.laenge === 0 || Oberflaeche.LOOP_LAENGEN.includes(d.laenge))) return this.json(a, 400, { fehler: 'laenge' });
-    const st = this.deckStand(d.deck);
-    if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
-    const ab = this.deckAb(st, raster);
-    // behalte_start (Längenknöpfe, Traktor): bei scharfem Loop nur die Länge ändern, der Start bleibt (/k/deck/loop_laenge, Kern setzt
-    // den Loop bei start_beat statt am Kopf). Ohne gemerkten scharfen Loop (oder Länge 0) der gewöhnliche Weg.
-    const alt = d.behalte_start === true && d.laenge > 0 && this.loopVon(st) ? this.aktiverLoop[String(st.deck)] : undefined;
-    if (alt) {
-      // Taps in a row (4 to 8 to 16) each move the memory before the core answers, so the length the memory held at a tap is not what the core plays:
-      // the rollback goes to the length the core last CONFIRMED (sicher), and only when no newer tap is waiting (it moved the memory since)
-      const taste = String(st.deck), laenge = d.laenge;
-      const z = ((this.loopLaengeTasten ??= {})[taste] ??= { sicher: alt.laenge, tippen: 0, offen: 0, kette: Promise.resolve() });
-      const nr = ++z.tippen;
-      z.offen++;
-      this.setzeAktivenLoop(st.deck, { ...alt, laenge });
-      const felder = this.deckTeil('/k/deck/loop_laenge', st, ab, raster, { start_beat: alt.start, laenge_beats: laenge });
-      // abgelehnt (Loop ginge aus dem Material): der alte Loop läuft weiter. The answers may arrive in any order (a refusal comes at ab_beat,
-      // an accepted tap is only known after its wait): each tap decides after the earlier ones did, so `sicher` is up to date when a refusal rolls back
-      z.kette = Promise.all([this.warteBisAb(Number(felder.id), ab), z.kette]).then(([q]) => {
-        const abgelehnt = !!q && GRAPH_ABGELEHNT.includes(q.status);
-        if (!abgelehnt) z.sicher = laenge;
-        const jetzt = this.aktiverLoop[taste];   // only the length goes back: a jump on the same grid beat may have moved the start meanwhile
-        if (abgelehnt && nr === z.tippen && jetzt) this.setzeAktivenLoop(st.deck, { ...jetzt, laenge: z.sicher });
-        if (--z.offen === 0 && this.loopLaengeTasten?.[taste] === z) delete this.loopLaengeTasten[taste];
-      });
-      return this.json(a, 200, { ok: true, felder });
-    }
-    // Loop-Raster (Plan 2026-10-21): mit Raster setzt der Server den Start selbst auf das Track-Raster (L1/L2) und schickt ihn als
-    // festen Start (/k/deck/loop_laenge, Kern art 5 mit quell_beat); lehnt der Kern ab, gilt wieder der vorige Loop (L4).
-    const imLauf = Number(st.z.status) === 3 || Number(st.z.status) === 4;   // im Loop/Roll: den gewickelten Kopf kennt nur der Kern (L2b)
-    if (d.laenge > 0 && raster > 0 && !imLauf) {
-      // Sofort (nur Vorlauf), nicht auf die Rasterstelle des Masters: der Start liegt schon auf dem Track-Raster, das Warten kostete bei
-      // Takt-Raster bis zu 4 Beats (Andreas 21.10.: „der loop knopf reagiert nur verzögert“). Liegt der Start bis zu ½ Beat vor dem Kopf,
-      // läuft der Kopf in den Loop hinein.
-      const jetzt = this.deckAb(st, 0);
-      const start = loopStart({ laeuft: Number(st.z.status) >= 2, quell: Number(st.z.quell_beat), beat: st.beat, ab: jetzt, raster, eins: st.eins });
-      const vorher = this.aktiverLoop[String(st.deck)];
-      this.setzeAktivenLoop(st.deck, { schluessel: Oberflaeche.fassungSchluessel(st.f), start, laenge: d.laenge });
-      const felder = this.deckTeil('/k/deck/loop_laenge', st, jetzt, 0, { start_beat: start, laenge_beats: d.laenge });
-      void this.warteQuittung(Number(felder.id), jetzt).then((q) => {
-        if (!q || !GRAPH_ABGELEHNT.includes(q.status)) return;
-        if (vorher) this.setzeAktivenLoop(st.deck, vorher);
-        else { delete this.aktiverLoop[String(st.deck)]; this.sichereAktiveLoops(); }
-      });
-      return this.json(a, 200, { ok: true, felder });
-    }
-    this.merkeLoop(st, ab, d.laenge);   // Raster 0 oder aus: der Kern setzt ab dem Kopf (L3)
-    this.json(a, 200, { ok: true, felder: this.deckTeil('/k/deck/loop', st, ab, raster, { laenge_beats: d.laenge }) });
-  }
-
-  // First frame of the deck loop in the rendering file (grid offset included); the cut of deck/loop/sichern and of the live module export
-  private loopStartFrame(st: { deck: number; f: Fassung; erster: number }, l: { start: number }): number {
-    return Math.round(st.erster + this.rasterWert(st.deck, st.f).versatz_frames + l.start * (48000 * 60 / st.f.basis_bpm));
-  }
-  // The deck's active loop as a cut of its rendering, for the live module export (areas/live/export.ts): the same frames deck/loop/sichern writes
-  deckLoopAusschnitt(deck: unknown): DeckLoopAusschnitt | { code: number; fehler: string } {
-    if (!istOffenesDeck(deck)) return { code: 400, fehler: 'unbekanntes_deck' };
-    const st = this.deckStand(deck);
-    if (!st) return { code: 409, fehler: 'kein_kernstand' };
-    const l = this.loopVon(st);
-    if (!l) return { code: 409, fehler: 'kein_loop' };
-    let basis: string;
-    try { basis = fassungQuelle(this.opt.bestand, st.f.material_id, st.f.basis_bpm, st.f.fassung).datei; } catch { return { code: 409, fehler: 'kein_bibliothekstrack' }; }
-    return { deck: st.deck, material_id: st.f.material_id, basis_bpm: st.f.basis_bpm, fassung: st.f.fassung, basisDatei: basis,
-      eins: st.eins, startFrame: this.loopStartFrame(st, l), frames: Math.round(l.laenge * 48000 * 60 / st.f.basis_bpm), laenge_beats: l.laenge, von_beat: l.start };
-  }
-
-  // Task 11 (decision 19): the key of the deck on the master. Candidates: the playing decks (status 2+) with an open channel. The loudest channel on the
-  // master wins (peak of the last 3 s in the unthrottled buffer, channel 'deck/<n>'); without a reading the lowest deck number. The key is the catalogue's
-  // Camelot value for the deck's material, the library's own analysis as a fallback.
-  masterTonart(): { deck: number; tonart: string | null } | { code: number; fehler: string } {
-    const pegel = this.pegelPuffer.lies(3);
-    let bester: { n: number; db: number } | null = null;
-    for (const n of OFFENE_DECKS) {
-      const z = this.stand.decks[String(n)] as Record<string, unknown> | undefined;
-      if (!z || !(Number(z.status) >= 2) || !kanalOffen(this.stand.regler, pultContainerPfad[n - 1])) continue;
-      const db = pegel[`deck/${n}`]?.max_db ?? -200;
-      if (!bester || db > bester.db) bester = { n, db };
-    }
-    if (!bester) return { code: 409, fehler: 'kein_deck' };
-    const mid = String((this.stand.decks[String(bester.n)] as Record<string, unknown>).material_id);
-    return { deck: bester.n, tonart: this.tonartVon(mid) };
-  }
-  // One key source for the live modules (the module origin at export and the deck on the master): the library's own analysis of the track (what /lage
-  // shows) first, the catalogue's tag only as a fallback
-  tonartVon(mid: string): string | null {
-    return tonartQuelle(leseBestand(this.opt.bestand).find((x) => x.material_id === mid)?.camelot, this.katalogEintrag(mid)?.camelot);
-  }
-  private moduleHerkunft(mid: string): Zeile | null {
-    const z = this.katalogEintrag(mid);
-    return z ? { ...z, camelot: this.tonartVon(mid) } : null;
-  }
-
-  // POST /deck/loop/sichern {deck}: aktiver Deck-Loop → Loop der Bibliothek (Ausschnitt der Fassung wie der Kern ihn
-  // spielt: schlag0 = erster_schlag_frame + Grid-Versatz), Name a|b-HHMMSS-<beats>b; loading it is the loop deck (container core)
-  private deckLoopSichern(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
-    if (d.box !== undefined) return this.json(a, 400, { fehler: 'unbekannte_box' });   // the loop boxes are gone
-    const st = this.deckStand(d.deck);
-    if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
-    const l = this.loopVon(st);
-    if (!l) return this.json(a, 409, { fehler: 'kein_loop' });
-    const fpb = 48000 * 60 / st.f.basis_bpm;
-    const start = this.loopStartFrame(st, l);
-    const jetzt = new Date(), z = (n: number) => String(n).padStart(2, '0');
-    const name = `${'abcd'[d.deck - 1]}-${z(jetzt.getHours())}${z(jetzt.getMinutes())}${z(jetzt.getSeconds())}-${l.laenge}b`;
-    try {
-      const q = fassungQuelle(this.opt.bestand, st.f.material_id, st.f.basis_bpm, st.f.fassung);
-      schreibeLoopAusFassung({ basis: q.datei, dir: this.loopOrdner(), name, startFrame: start, frames: Math.round(l.laenge * fpb),
-        bpm: st.f.basis_bpm, beats: l.laenge, herkunft: { material_id: st.f.material_id, fassung: st.f.fassung, quell_beat: l.start } });
-    } catch (err) { return this.json(a, 500, { fehler: 'schreiben', text: (err as Error).message }); }
-    this.opt.log?.({ typ: 'deck_loop_gesichert', deck: st.deck, name, start_frame: start });
-    this.json(a, 200, { ok: true, name });
-  }
-
-  // Hotcues der Fassung; fehlt ihre Datei, die der nächstälteren, auf dieselbe Audio-Stelle verschoben (hotcuesErbe)
-  private hotcuesErbeVon(f: Fassung): { hotcues: Record<string, Hotcue>; von: number | null } {
-    return hotcuesErbe(this.hotcueOrdner(), f, { fpb: 48000 * 60 / f.basis_bpm,
-      esf: (r) => this.einsDerFassung(f.material_id, f.basis_bpm, r)?.esf ?? null,
-      rasterV: (r) => this.rasterErbeVon({ ...f, fassung: r }).v });
-  }
-  // Hotcues (D5, D6): {deck, nr, aktion: setzen|spielen|loeschen, quell_beat?, art?, laenge?, raster}
-  private deckHotcue(d: Record<string, unknown>, a: http.ServerResponse): void {
-    const raster = this.rasterAus(d);
-    if (raster === null) return this.json(a, 400, { fehler: 'raster' });
-    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
-    if (typeof d.nr !== 'number' || !Number.isInteger(d.nr) || d.nr < 1 || d.nr > 8) return this.json(a, 400, { fehler: 'nr' });
-    const st = this.deckStand(d.deck);
-    if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
-    const datei = hotcueDatei(this.hotcueOrdner(), st.f);
-    const alle = this.hotcuesErbeVon(st.f).hotcues;   // neue Fassung ohne eigene Datei: der geerbte Satz wird beim Schreiben ihre eigene
-    const setze = (q: number) => {
-      this.kern.sende('/k/deck/hotcue_setzen', { id: Number(++this.id), quelle: this.quelle(), deck: st.deck, nr: d.nr, quell_beat: q });
-      this.gesendet++;
-    };
-    if (d.aktion === 'setzen' && d.aus_loop === true) {   // leeres Pad bei laufendem Deck-Loop: genau dieser Loop wird der Cue
-      if (!Oberflaeche.loopScharf(st.z)) return this.json(a, 409, { fehler: 'kein_loop' });
-      const l = this.loopVon(st);
-      // Ohne gemerkten Loop (Seiten-Server neu gestartet, der Kern hält ihn noch): Kopf aufs Raster ab der Eins, Länge der Seite
-      const lg = typeof d.laenge === 'number' && Oberflaeche.LOOP_LAENGEN.includes(d.laenge) ? d.laenge : 4;
-      const r0 = raster > 0 ? raster : 1, q = Number(st.z.quell_beat);
-      const h: Hotcue = l ? { quell_beat: Math.round(l.start * 1000) / 1000, art: 'loop', laenge: l.laenge }
-        : { quell_beat: st.eins + r0 * Math.floor((q - st.eins) / r0 + 1e-6), art: 'loop', laenge: lg };
-      alle[String(d.nr)] = h;
-      schreibeHotcues(datei, alle);
-      setze(h.quell_beat);
-      return this.json(a, 200, { ok: true, hotcue: h });
-    }
-    if (d.aktion === 'setzen') {
-      const q = typeof d.quell_beat === 'number' && Number.isFinite(d.quell_beat) ? d.quell_beat : Number(st.z.quell_beat);
-      const art = d.art === 'loop' ? 'loop' : 'shot';
-      if (art === 'loop' && !(typeof d.laenge === 'number' && Oberflaeche.LOOP_LAENGEN.includes(d.laenge))) return this.json(a, 400, { fehler: 'laenge' });
-      const h: Hotcue = art === 'loop' ? { quell_beat: rasterRunden(q, raster, st.eins), art, laenge: d.laenge as number }
-        : { quell_beat: rasterRunden(q, raster, st.eins), art };
-      alle[String(d.nr)] = h;
-      schreibeHotcues(datei, alle);
-      setze(h.quell_beat);
-      return this.json(a, 200, { ok: true, hotcue: h });
-    }
-    if (d.aktion === 'loeschen') {
-      delete alle[String(d.nr)];
-      schreibeHotcues(datei, alle);
-      setze(NaN);
-      return this.json(a, 200, { ok: true });
-    }
-    if (d.aktion !== 'spielen') return this.json(a, 400, { fehler: 'aktion' });
-    const h = alle[String(d.nr)];
-    if (!h) return this.json(a, 400, { fehler: 'leer' });
-    const ab = this.deckAb(st, raster);
-    const hot = this.deckTeil('/k/deck/hotcue', st, ab, raster, { nr: d.nr });
-    // LOOP: gleicher Ziel-Beat, spätere id → der Kern führt den Loop nach dem Hotcue aus (seq)
-    const lp = h.art === 'loop' ? this.deckTeil('/k/deck/loop', st, ab, raster, { laenge_beats: h.laenge ?? 4 }) : null;
-    if (lp) this.setzeAktivenLoop(st.deck, { schluessel: Oberflaeche.fassungSchluessel(st.f), start: h.quell_beat, laenge: h.laenge ?? 4 });
-    this.json(a, 200, { ok: true, felder: hot, loop: lp });
-  }
-
-  private hotcuesAus(deck: number, a: http.ServerResponse): void {
-    const st = this.deckStand(deck);
-    if (!st) return this.json(a, 200, {});
-    this.json(a, 200, this.hotcuesErbeVon(st.f).hotcues);
-  }
-
-  // Nach /e/geladen (und nach einem Kern-Neustart) die gespeicherten Hotcues der Fassung an den Kern (D5).
-  private hotcuesWieder(deck: number, f: Fassung): void {
-    if (!f?.material_id) return;
-    const { hotcues: alle, von } = this.hotcuesErbeVon(f);
-    let n = 0;
-    for (const [nr, h] of Object.entries(alle)) {
-      if (!Number.isFinite(h?.quell_beat)) continue;
-      this.kern.sende('/k/deck/hotcue_setzen', { id: Number(++this.id), quelle: this.quelle(), deck, nr: Number(nr), quell_beat: h.quell_beat });
-      this.gesendet++;
-      n++;
-    }
-    if (n > 0) this.opt.log?.({ typ: 'hotcues_wieder', deck, anzahl: n, ...(von !== null ? { geerbt_von: von } : {}) });
-  }
+  ladeNeustartStand(...a: Parameters<typeof NS.ladeNeustartStand>) { return NS.ladeNeustartStand.call(this, ...a); }
+  private uebernehmeNeustartStand(...a: Parameters<typeof NS.uebernehmeNeustartStand>) { return NS.uebernehmeNeustartStand.call(this, ...a); }
+  merkeNeustartStand(...a: Parameters<typeof NS.merkeNeustartStand>) { return NS.merkeNeustartStand.call(this, ...a); }
+  private planFuerPlatte(...a: Parameters<typeof NS.planFuerPlatte>) { return NS.planFuerPlatte.call(this, ...a); }
+  private sichereNeustartStandSofort(...a: Parameters<typeof NS.sichereNeustartStandSofort>) { return NS.sichereNeustartStandSofort.call(this, ...a); }
+  private sichereNeustartStand(...a: Parameters<typeof NS.sichereNeustartStand>) { return NS.sichereNeustartStand.call(this, ...a); }
+  private deckLoop(...a: Parameters<typeof DK.deckLoop>) { return DK.deckLoop.call(this, ...a); }
+  private loopStartFrame(...a: Parameters<typeof DK.loopStartFrame>) { return DK.loopStartFrame.call(this, ...a); }
+  deckLoopAusschnitt(...a: Parameters<typeof DK.deckLoopAusschnitt>) { return DK.deckLoopAusschnitt.call(this, ...a); }
+  masterTonart(...a: Parameters<typeof DK.masterTonart>) { return DK.masterTonart.call(this, ...a); }
+  tonartVon(...a: Parameters<typeof DK.tonartVon>) { return DK.tonartVon.call(this, ...a); }
+  private moduleHerkunft(...a: Parameters<typeof DK.moduleHerkunft>) { return DK.moduleHerkunft.call(this, ...a); }
+  private deckLoopSichern(...a: Parameters<typeof DK.deckLoopSichern>) { return DK.deckLoopSichern.call(this, ...a); }
+  private hotcuesErbeVon(...a: Parameters<typeof DK.hotcuesErbeVon>) { return DK.hotcuesErbeVon.call(this, ...a); }
+  private deckHotcue(...a: Parameters<typeof DK.deckHotcue>) { return DK.deckHotcue.call(this, ...a); }
+  private hotcuesAus(...a: Parameters<typeof DK.hotcuesAus>) { return DK.hotcuesAus.call(this, ...a); }
+  private hotcuesWieder(...a: Parameters<typeof DK.hotcuesWieder>) { return DK.hotcuesWieder.call(this, ...a); }
 
   // Plan 2 (Spec E5): Andreas' Muster aus dem Feld. Geprüft und geschrieben NICHT hier, sondern von djk-muster in einem
   // Kindprozess mit denselben Rechten wie der Erzeuger (node --permission, nur lesen in djk und Strudel, schreiben nur im
@@ -1736,136 +490,16 @@ export class Oberflaeche {
   // intern.versatz (live scene restore only, never from a request body): the phase offset in cycles, passed to djk-muster as --versatz
   // A2: per stream the switch bar of the running pattern (absolute bar, 1-based) = time zero of its .rein/.raus; a live scene stores it as `anker`
   private musterAnkerTakt = new Map<number, number>();
-  private strudel(d: Record<string, unknown>, a: http.ServerResponse, intern: { versatz?: number; abBeat?: number } = {}): Promise<void> {
-    const lauf = this.musterKette.then(() => this.strudelEins(d, a, intern));
-    this.musterKette = lauf.catch(() => {});
-    return lauf;
-  }
-
-  private async strudelEins(d: Record<string, unknown>, a: http.ServerResponse, intern: { versatz?: number; abBeat?: number } = {}): Promise<void> {
-    if (typeof d.text !== 'string') return this.json(a, 400, { fehler: 'kein_text' });
-    const strom = Oberflaeche.strom(d.strom);
-    if (strom === null) return this.json(a, 400, { fehler: 'strom' });
-    if (d.bezeichnung !== undefined && d.bezeichnung !== null && !(typeof d.bezeichnung === 'string' && d.bezeichnung.length >= 1 && d.bezeichnung.length <= 60 && !/[\u0000-\u001f\u007f]/.test(d.bezeichnung))) return this.json(a, 400, { fehler: 'bezeichnung', text: 'bezeichnung: string of 1..60 characters, no control characters' });
-    // Plan Hand T7 (Review M4): Cypher schreibt als cypher und ohne --als-andreas; djk-muster hält AUTO ein (rc 4)
-    const von = this.quelle();
-    if (von === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
-    // container core M6: the pattern belongs to the strudel module of the live container; nothing is written without it
-    const offen = this.proj.zugang.offen();
-    if (!offen || offen.projekt.live !== true) return this.json(a, 409, { fehler: 'kein_liveprojekt', text: 'the strudel module sits in the live container' });
-    const modul = strudelGruppe(offen.projekt);
-    if (!modul || platzVonGruppe(offen.projekt, modul.id) === null) return this.json(a, 409, { fehler: 'kein_strudel_modul', text: 'no place holds the strudel module; place it with POST /plaetze' });
-    const ordner = this.musterOrdner(strom);
-    fs.mkdirSync(ordner, { recursive: true });   // Review F4: im Kindprozess scheitert das Schreiben in einen neuen Ordner
-    const strudel = path.dirname(strudelPakete());
-    const r = await new Promise<{ code: number | null; fehler: string; zeitlimit: boolean }>((fertig) => {
-      let k: ReturnType<typeof spawn>;
-      try {
-      k = spawn(process.execPath, ['--max-old-space-size=512', '--permission', `--allow-fs-read=${path.join(REPO, 'djk')}`, `--allow-fs-read=${strudel}`,
-        `--allow-fs-read=${ordner}`, `--allow-fs-write=${ordner}`, REPO_PFADE.djkMuster,
-        '--ziel', path.join(ordner, 'strom1.js'), ...(von === 'cypher' ? ['--von', 'cypher'] : ['--von', 'andreas', '--als-andreas']),
-        ...(Number.isInteger(intern.versatz) && intern.versatz !== 0 ? [`--versatz=${intern.versatz}`] : []),
-        ...(typeof d.bezeichnung === 'string' ? [`--bezeichnung=${d.bezeichnung}`] : []), '-'], { stdio: ['pipe', 'ignore', 'pipe'] });
-      } catch (e) {   // a throwing spawn (bad argument) is a logged error, never an unhandled rejection
-        const m = e instanceof Error ? e.message : String(e);
-        this.opt.log?.({ typ: 'muster_spawn_fehler', text: m });
-        return fertig({ code: 1, fehler: `Error: ${m}`, zeitlimit: false });
-      }
-      let fehler = '';
-      let zeitlimit = false;
-      const uhr = setTimeout(() => { zeitlimit = true; k.kill('SIGKILL'); }, STRUDEL_ZEITLIMIT_MS);
-      k.stderr!.on('data', (b: Buffer) => { if (fehler.length < 4096) fehler += b.toString(); });
-      k.on('error', (e) => { fehler += e.message; });
-      k.on('close', (code) => { clearTimeout(uhr); fertig({ code, fehler, zeitlimit }); });
-      k.stdin!.on('error', () => {});
-      k.stdin!.end(d.text as string);
-    });
-    if (r.zeitlimit) return this.json(a, 400, { fehler: `Zeile 1: Zeitlimit ${STRUDEL_ZEITLIMIT_MS / 1000} s überschritten` });
-    if (r.code === 4 && von === 'cypher') return this.json(a, 409, { fehler: 'auto_aus', text: 'AUTO is off: Andreas holds the pattern' });
-    if (r.code === 2) {
-      const zeile = r.fehler.split('\n').find((z) => z.startsWith('djk-muster: ')) ?? r.fehler;
-      return this.json(a, 400, { fehler: zeile.replace(/^djk-muster: /, '').trim() || 'Zeile 1: unbekannter Fehler' });
-    }
-    if (r.code !== 0) {   // Review F3: die Fehlerzeile, nicht die letzte Zeile (das ist „Node.js v22…“)
-      const zeilen = r.fehler.split('\n').map((z) => z.trim()).filter((z) => z && !/^Node\.js v/.test(z));
-      const grund = zeilen.find((z) => /Error|ERR_|djk-muster:/.test(z)) ?? zeilen.pop() ?? `rc ${r.code}`;
-      return this.json(a, 400, { fehler: `Zeile 1: Prüfung fehlgeschlagen (${grund.slice(0, 200)})` });
-    }
-    this.opt.log?.({ typ: 'muster', von, laenge: d.text.length });
-    // the switch bar: a track move knows its beat; a direct pattern takes effect at the next bar the erzeuger can still reach
-    this.musterAnkerTakt.set(strom, Math.floor((typeof intern.abBeat === 'number' ? intern.abBeat : this.abVon('takt')) / this.proTakt()) + 1);
-    let spur: { id: string; neu: boolean };
-    try { spur = await this.sorgeFuerStromSpur(strom, von); } catch (e) { const r = alsAntwort(e, this.bereichKontext()); return this.json(a, r.code, r.j); }
-    this.json(a, 200, { ok: true, strom_spur: spur.id, ...(spur.neu ? { strom_spur_neu: true } : {}) });
-  }
-
-  // The stream that AUTO holds for a target: the alias and host forms of stromVonZiel, and a row `spur/<nr>/...` of a strom track of the open project
-  // (the direct form of the carve-out) holds the stream of that track, so the AUTO switch cannot be bypassed through the row.
-  private stromVonZielOffen(ziel: string): number | null {
-    const st = stromVonZiel(ziel);
-    if (st !== null) return st;
-    const m = /^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\//.exec(ziel);
-    const o = m ? this.proj.zugang.offen() : null;
-    const spur = m && o ? o.projekt.spuren.find((x) => x.nr === Number(m[1]) && x.art === 'strom') : undefined;
-    return spur?.strom !== undefined && (ALLE_STROEME as readonly number[]).includes(spur.strom) ? spur.strom : null;
-  }
-
-  // The strom track of stream n in the strudel module: created on first use (one strom_spur_neu command), later calls leave the project alone.
-  private async sorgeFuerStromSpur(strom: number, quelle: 'andreas' | 'cypher'): Promise<{ id: string; neu: boolean }> {
-    const o = this.proj.zugang.offen();
-    const da = o && stromSpur(o.projekt, strom);
-    if (o && da) return { id: da.id, neu: false };
-    if (!o) throw new ProjFehler(409, 'kein_liveprojekt');
-    const r = await this.proj.sitzung.aendern({ rev: o.projekt.rev, label: `Strom track ${strom}`, befehle: [{ befehl: 'strom_spur_neu', strom }] }, quelle);
-    if (r.code !== 200) throw new ProjFehler(r.code, String(r.j.fehler ?? 'intern'));
-    const neu = this.proj.zugang.offen()?.projekt && stromSpur(this.proj.zugang.offen()!.projekt, strom);
-    return { id: neu ? neu.id : '', neu: true };
-  }
+  private strudel(...a: Parameters<typeof SD.strudel>) { return SD.strudel.call(this, ...a); }
+  private strudelEins(...a: Parameters<typeof SD.strudelEins>) { return SD.strudelEins.call(this, ...a); }
+  private stromVonZielOffen(...a: Parameters<typeof SD.stromVonZielOffen>) { return SD.stromVonZielOffen.call(this, ...a); }
+  private sorgeFuerStromSpur(...a: Parameters<typeof SD.sorgeFuerStromSpur>) { return SD.sorgeFuerStromSpur.call(this, ...a); }
 
   private json(a: http.ServerResponse, code: number, daten: unknown): void { sendeJson(a, code, daten); }   // http/transport.ts
 
-  // Browser S6: Loop aus der Mediathek in die Loop-Bibliothek (danach lädt die Seite ihn wie jeden Loop per POST /loop).
-  // Rechnen darf nur ein Import zur Zeit und nur mit nice 19 / ionice idle (loop_import.ts); dieselbe Quelle wird nicht doppelt angelegt.
-  // The import itself (also the catalogue source of a loop deck cell): the loop of a catalogue sound is in the library afterwards, an earlier import is reused.
-  private async loopAusKatalogName(sha: string): Promise<{ name: string; beats: number; schonDa: boolean }> {
-    const z = this.katalog.eintrag(sha);
-    if (!z) throw new KatalogFehler(404, 'unbekannt');
-    if (z.typ !== 'loop') throw new KatalogFehler(409, 'kein_loop');
-    if (z.schutz === 'ableton') throw new KatalogFehler(409, 'nur_live');
-    if (!z.pfad || !fs.existsSync(z.pfad)) throw new KatalogFehler(409, 'datei_fehlt');
-    const beats = beatsVon(z);
-    const dir = this.loopOrdner();
-    const da = findeImport(dir, z.sha);
-    if (da) return { ...da, schonDa: true };
-    const t0 = Date.now();
-    let naht: Record<string, unknown> = {};
-    const name = await importiereLoop({ bericht: (x) => { naht = x; }, pfad: z.pfad, beats, bpm: z.bpm, name: loopNameVon(z.name ?? z.titel ?? 'loop', dir), dir, werkzeug: this.opt.loopWerkzeug,
-      herkunft: { quelle: 'mediathek', sha: z.sha, pfad: z.pfad, bpm: z.bpm, takte: z.takte } });
-    this.opt.log?.({ typ: 'loop_importiert', name, beats, sha: z.sha, ms: Date.now() - t0, ...naht });
-    return { name, beats, schonDa: false };
-  }
-  // Loop deck {sha} source: a catalogue loop goes the way of POST /loops/aus-katalog, a one-shot is copied as it is (art 'einmal'); a track is kein_loop
-  private async katalogFuerDeck(sha: string): Promise<{ name: string; einmal?: { datei: string; sha: string; frames: number } }> {
-    const z = this.katalog.eintrag(sha);
-    if (z?.typ !== 'oneshot') return this.loopAusKatalogName(sha);
-    if (z.schutz === 'ableton') throw new KatalogFehler(409, 'nur_live');
-    if (!z.pfad || !fs.existsSync(z.pfad)) throw new KatalogFehler(409, 'datei_fehlt');
-    return { name: (z.name ?? z.titel ?? 'one-shot').toString().trim().slice(0, 64) || 'one-shot',
-      einmal: { datei: z.pfad, sha: z.sha, frames: z.dauer_s !== null && z.dauer_s > 0 ? Math.ceil(z.dauer_s * 48000) : 0 } };
-  }
-  private async loopAusKatalog(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    try {
-      const r = await this.loopAusKatalogName(String(d.sha ?? ''));
-      if (r.schonDa) return this.json(a, 200, { name: r.name, beats: r.beats, schon_da: true });
-      this.json(a, 201, { name: r.name, beats: r.beats });
-    } catch (e) {
-      if (e instanceof LoopImportFehler) {
-        if (e.code >= 500 || e.code === 422) this.opt.log?.({ typ: 'loop_import_fehler', fehler: e.fehler, text: e.text });
-        return this.json(a, e.code, e.text ? { fehler: e.fehler, text: e.text } : { fehler: e.fehler });
-      }
-      this.katalogFehler(e, a);
-    }
-  }
+  private loopAusKatalogName(...a: Parameters<typeof SD.loopAusKatalogName>) { return SD.loopAusKatalogName.call(this, ...a); }
+  private katalogFuerDeck(...a: Parameters<typeof SD.katalogFuerDeck>) { return SD.katalogFuerDeck.call(this, ...a); }
+  private loopAusKatalog(...a: Parameters<typeof SD.loopAusKatalog>) { return SD.loopAusKatalog.call(this, ...a); }
 
   private koerper(q: http.IncomingMessage): Promise<Record<string, unknown>> { return leseKoerper(q); }   // http/transport.ts
 
@@ -1879,247 +513,32 @@ export class Oberflaeche {
   // Je Pfad ALLE offenen Cypher-Teile (id, ab, dauer). Gelöscht bei Quittung 4/6/7/8, nach ihrem Ende (nächster Aufruf),
   // bei Stop Cypher, /abbruch und neuem Kern.
   private readonly fahrtEnde = new Map<string, { id: number; ab: number; dauer: number }[]>();
-  private setzeKiGestoppt(an: boolean): void {
-    const war = this.kiGestoppt;
-    this.kernKiGestoppt = an;
-    this.nachKiWechsel(war);
-  }
-  private setzeHandBremse(an: boolean): void {
-    const war = this.kiGestoppt;
-    this.handBremse = an;
-    this.nachKiWechsel(war);
-  }
-  private handStand(): { gestoppt: boolean; bremse: boolean; kern_ki: boolean } {
-    return { gestoppt: this.kiGestoppt, bremse: this.handBremse, kern_ki: this.kernKiGestoppt };
-  }
-  private nachKiWechsel(war: boolean): void {
-    if (this.kiGestoppt && !war) this.fahrtEnde.clear();
-    if (this.kiGestoppt && !war) void this.cypherSpurenAbbrechen();   // Studio S6 F1: Stop Cypher hält auch Wirt und Muster
-    this.verteile({ a: 'hand', f: this.handStand() });
-  }
-  /** Music plays: an open deck runs (same test as the ear) or the arrangement plays or counts in. */
-  private musikLaeuft(): boolean {
-    const st = this.proj.sitzung.lage.arr?.status;
-    return OFFENE_DECKS.some((n) => Number(this.deckStand(n)?.z.status) >= 2) || st === 1 || st === 2;
-  }
+  private setzeKiGestoppt(...a: Parameters<typeof WI.setzeKiGestoppt>) { return WI.setzeKiGestoppt.call(this, ...a); }
+  private setzeHandBremse(...a: Parameters<typeof WI.setzeHandBremse>) { return WI.setzeHandBremse.call(this, ...a); }
+  private handStand(...a: Parameters<typeof WI.handStand>) { return WI.handStand.call(this, ...a); }
+  private nachKiWechsel(...a: Parameters<typeof WI.nachKiWechsel>) { return WI.nachKiWechsel.call(this, ...a); }
+  private musikLaeuft(...a: Parameters<typeof WI.musikLaeuft>) { return WI.musikLaeuft.call(this, ...a); }
   private handRegeln: HandRegel[] = [bremsRegel(() => this.kiGestoppt), stufenRegel(), spielRegel(() => this.musikLaeuft()), eimerRegel()];
   private readonly cypherQuittungen: Felder[] = [];   // die letzten 20 mit Quelle cypher, für /lage
-  private merkeQuittung(f: Felder): void {
-    if (f.quelle === 'cypher') { this.cypherQuittungen.push(f); if (this.cypherQuittungen.length > 20) this.cypherQuittungen.shift(); }
-    const id = Number(f.id), l = this.quittungen.get(id) ?? [];
-    if ([4, 6, 7, 8].includes(Number(f.status))) {   // abgelehnt, abgebrochen: das Ende dieser Fahrt gibt es nicht
-      for (const [pfad, teile] of this.fahrtEnde) {
-        const rest = teile.filter((e) => e.id !== id);
-        if (rest.length) this.fahrtEnde.set(pfad, rest); else this.fahrtEnde.delete(pfad);
-      }
-    }
-    l.push(f); this.quittungen.set(id, l);
-    if (this.quittungen.size > 200) this.quittungen.delete(this.quittungen.keys().next().value as number);
-  }
-  // Erste Quittung mit Status ≠ 1 (angenommen). Review Hand M2: Ablehnungen am Start (ki_stopp, regler_beim_menschen …)
-  // kommen erst zum ab_beat; darum bis ab_beat + ¼ Beat warten (höchstens 4 s), dann die letzte; null, wenn keine kam.
-  // bisEnde: nur der Endstatus zählt (nicht 1 angenommen, nicht 2 gestartet): ein Teil belegt seinen Stellwerk-Platz bis dahin (1.10 Slice 3, P11)
-  // maxMs: longer wait without abBeat for slow loads (S12: sampler graphs)
-  // ersteGenuegt (loop deck, M4 fix): the first receipt of any status ends the wait (status 1, accepted and pending, is an answer); maxMs is then only
-  // the upper bound for no receipt at all
-  private async warteQuittung(id: number, abBeat?: number, bisEnde = false, maxMs?: number, ersteGenuegt = false): Promise<{ status: number; grund: string } | null> {
-    const t0 = Date.now();
-    for (;;) {
-      const l = this.quittungen.get(id);
-      const x = l?.find((q) => (ersteGenuegt ? true : bisEnde ? Number(q.status) > 2 : Number(q.status) !== 1));
-      if (x) return { status: Number(x.status), grund: String(x.grund ?? '') };
-      const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? 0;
-      const faellig = abBeat === undefined ? Date.now() - t0 >= (maxMs ?? 400) : beat >= abBeat + 0.25;   // S12: maxMs for slow loads (sampler graphs)
-      if (faellig || Date.now() - t0 >= Math.max(4000, maxMs ?? 0)) {
-        const y = l?.at(-1);
-        return y ? { status: Number(y.status), grund: String(y.grund ?? '') } : null;
-      }
-      await new Promise((r) => setTimeout(r, 20));
-    }
-  }
-  // warteQuittung up to ab_beat and past it: the core checks "loop stays in the material" and the AUTO stop only when it executes at ab_beat,
-  // which can lie more than 4 s ahead on a coarse grid (16 beats = 7.5 s at 128 BPM); the plain 4 s cap would return the 'accepted' receipt
-  private warteBisAb(id: number, ab: number): Promise<{ status: number; grund: string } | null> {
-    const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
-    // the cap is only the end of the wait for a core that never answers (the wait itself ends at ab_beat + 1/4 beat): computed at the slowest tempo a ramp can
-    // reach (60 BPM), so a tempo ramp downwards after the send cannot make the 'accepted' receipt come too early
-    const ms = u ? Math.max(0, (ab - u.beat) * 60000 / Math.min(u.bpm > 0 ? u.bpm : 60, 60)) : 0;
-    return this.warteQuittung(id, ab, false, ms + 1000);
-  }
-  // Beats per bar of the open project (studio-taktart): its meter n/4, 4 with no project open or an invalid meter
-  private proTakt(): number { return takteProLive(this.proj.zugang.offen()?.projekt?.taktart); }
+  private merkeQuittung(...a: Parameters<typeof RG.merkeQuittung>) { return RG.merkeQuittung.call(this, ...a); }
+  private warteQuittung(...a: Parameters<typeof RG.warteQuittung>) { return RG.warteQuittung.call(this, ...a); }
+  private warteBisAb(...a: Parameters<typeof RG.warteBisAb>) { return RG.warteBisAb.call(this, ...a); }
+  private proTakt(...a: Parameters<typeof RG.proTakt>) { return RG.proTakt.call(this, ...a); }
   private letzteTaktart = 4;
   private taktartVeroeffentlicht = false;
-  // Publishes the meter: file `taktart` in every stream folder for the generator, SSE `taktart` for the page. The first call always runs (it
-  // removes a stale file of a crash); later calls only when the value changed, so a 4/4 session writes and emits nothing.
-  private meldeTaktart(): void {
-    const n = this.proTakt();
-    if (this.taktartVeroeffentlicht && n === this.letzteTaktart) return;
-    this.taktartVeroeffentlicht = true;
-    veroeffentlicheTaktart(ALLE_STROEME.map((st) => this.musterOrdner(st)), n, undefined, (ordner, e) => this.opt.log?.({ typ: 'taktart_datei_fehler', ordner, text: e.message }));
-    if (n !== this.letzteTaktart) { this.letzteTaktart = n; this.verteile({ a: 'taktart', f: { proTakt: n } }); }
-  }
+  private meldeTaktart(...a: Parameters<typeof RG.meldeTaktart>) { return RG.meldeTaktart.call(this, ...a); }
   // Strand 7 task 2.3: the live harmony lane; its file goes into every stream folder like the meter. The bars come from the master clock.
   private readonly harmonie = new LiveHarmonie({ ordner: () => ALLE_STROEME.map((st) => this.musterOrdner(st)),
     fehler: (ordner, e) => this.opt.log?.({ typ: 'harmonie_datei_fehler', ordner, text: e.message }) });
-  private harmonieTakte(): Takte {
-    const pt = this.proTakt(), u = this.kern.uhr as unknown as { beat: number } | null;
-    return { takt: Math.floor(this.abVon('takt') / pt) + 1, phrase: Math.floor(this.abVon('phrase') / pt) + 1, jetzt: Math.floor((u?.beat ?? 0) / pt) + 1 };
-  }
-  // Ziel-Beat der Master-Uhr zur Zeitangabe ab (D2): jetzt + Vorlauf, dann aufs Raster 1/4/16
-  private abVon(ab: string): number {
-    const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
-    const beat = u?.beat ?? 0, bpm = u?.bpm ?? 128;
-    return abBeat(beat, vorlaufBeats(bpm), abRaster(ab, this.proTakt()) as number);                  // ein Vorlauf (tempo_ramp.ts), derselbe wie im Bereich proj
-  }
-  // POST /regler {pfad, nach, takte?=0, ab?='takt', form?='s'} → /k/teil (D3); D8 Öffnen-Sperre für cypher
-  // Container core M8: `erz/<n>/...` is alias vocabulary: stream_alias.ts resolves it onto the strom track rows (the /k/teil carries the resolved row),
-  // onto a project insert (komp, bk insert: a project edit, no ramp) or refuses it. The hearing guard runs on the four container strips only,
-  // by the type of the place that feeds them (containerFrei, table D3); strom rows are never gated.
-  // Strand 11 (4.3) ramp rule for Cypher: a raise of master/pegel, a bus fader or a loops/stems container fader/trim by more than 6 dB must be a ramp of
-  // at least one bar. `von` = the start of a track move; else the level the page last saw (unknown level: no check, the core's own limits stay).
-  private rampePflicht(pfad: string, nach: number, takte: number, von?: number): boolean {
-    if (takte >= 1) return false;
-    const bus = /^bus\/\d+\/fader$/.test(pfad);
-    let streifen = false;
-    if (!bus && pfad !== 'master/pegel') {
-      const platz = /\/(fader|trim)$/.test(pfad) ? containerVonPfad(pfad) : null;
-      const projekt = this.proj.zugang.offen()?.projekt ?? null;
-      const typ = platz !== null && projekt?.live ? projekt.plaetze?.[platz - 1]?.typ : undefined;
-      streifen = typ === 'loops' || typ === 'stems';
-    }
-    if (!bus && !streifen && pfad !== 'master/pegel') return false;
-    const jetzt = von ?? this.stand.regler[pfad];
-    // unknown level (right after a page restart): treat it as quiet, so a set above -20 dB still needs a ramp
-    return typeof jetzt === 'number' ? nach - jetzt > 6 : nach > -20;
-  }
-  private async regler(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const pfad = d.pfad, nach = d.nach, takte = d.takte ?? 0, ab = d.ab ?? 'takt', form = d.form ?? 's';
-    if (typeof pfad !== 'string' || !PFAD.test(pfad)) return this.json(a, 400, { fehler: 'pfad' });
-    const projekt = this.proj.zugang.offen()?.projekt ?? null;
-    // D1 S2-Integration (Spec 6.22): Spur-Regler ändern sich nur über das Projekt (/proj/aendern, spur_aendern) und über den Rückweg /e/regler
-    // mit Halter mensch; PFAD bleibt Vokabular (Vertragstest), aber hier kommt nichts durch, sonst fuhre Cypher am Projekt vorbei.
-    // The rows of a strom track are the one exception (C1 carve-out): they take direct writes and ramps, the project follows (sitzung.rueckweg).
-    if (ueberProjekt(pfad) && !istStromZeile(projekt, pfad)) return this.json(a, 409, { fehler: 'ueber_projekt', text: ueberProjektText(pfad) });
-    if (typeof nach !== 'number' || !Number.isFinite(nach)) return this.json(a, 400, { fehler: 'nach' });
-    if (typeof takte !== 'number' || !(takte >= 0 && takte <= 64)) return this.json(a, 400, { fehler: 'takte' });
-    if (typeof ab !== 'string' || !(ab in AB)) return this.json(a, 400, { fehler: 'ab' });
-    if (form !== 's' && form !== 'linear') return this.json(a, 400, { fehler: 'form' });
-    if (this.quelle() === 'cypher') {
-      const st = this.stromVonZielOffen(pfad);   // the alias form first: erz/<n>/... still means stream n; a row spur/<nr>/... of a strom track too
-      if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: st, text: 'AUTO is off: Andreas holds this stream' });
-    }
-    if (this.quelle() === 'cypher' && this.rampePflicht(pfad, nach, takte)) return this.json(a, 409, { fehler: 'nur_rampe', pfad, text: GRUND_TEXT.nur_rampe });
-    let alias = loeseAlias(projekt, pfad, (k) => this.graphArt(k));
-    const aliasStrom = Number(/^erz\/(\d+)\//.exec(pfad)?.[1]);
-    if (alias.art === 'fehler' && alias.code === 'keine_strom_spur' && (PULT_ALIAS_STROEME as readonly number[]).includes(aliasStrom)) {
-      // R9: the module is placed but stream n has no track yet: the alias creates it (the way POST /strudel does), then writes
-      try { await this.sorgeFuerStromSpur(aliasStrom, this.quelle()); } catch (e) { const r = alsAntwort(e, this.bereichKontext()); return this.json(a, r.code, r.j); }
-      alias = loeseAlias(this.proj.zugang.offen()?.projekt ?? null, pfad, (k) => this.graphArt(k));
-    }
-    if (alias.art === 'fehler') {
-      const strom = aliasStrom;
-      return this.json(a, 409, { fehler: alias.code, text: alias.text, ...(alias.code === 'kein_strudel_modul' ? { strom } : {}) });
-    }
-    if (alias.art === 'insert') return await this.aliasInsert(alias, pfad, nach, takte, a);
-    const kernPfad = alias.art === 'zeile' ? alias.pfad : pfad;
-    const kernWert = nach;
-    let hoerscheinId = '';
-    const platz = this.quelle() === 'cypher' ? containerVonPfad(pfad) : null;
-    if (platz !== null && oeffnet(this.stand.regler, pfad, kernWert)) {
-      const typ = projekt?.live ? projekt.plaetze?.[platz - 1]?.typ : undefined;
-      const riegel = containerFrei(typ, this.deckStand(platz) !== null);
-      if (riegel === 'frei' && typ === 'seq') this.opt.log?.({ typ: 'seq_frei', pfad });
-      if (riegel !== 'frei') {
-        // Ohr T10: a track container needs a valid hearing check of the player with its number (key deck/<N>, §4.5)
-        const kanal = `deck/${platz}`;
-        const st = this.deckStand(platz);
-        const inhalt = st ? `${st.f.material_id}/${Math.round(st.f.basis_bpm * 1000)}_r${st.f.fassung}` : '';
-        const beat = this.kern.uhr?.beat ?? 0;
-        const schein = this.hoerscheinstelle.gueltig(kanal, inhalt, beat);
-        if (!schein) {
-          const letzterSchein = this.hoerscheinstelle.letzter(platz);
-          // Plan seq-fader-frei D6 (2): a SEQ deck place that still holds a stopped track: eject it, the next call then opens (the first one still fails)
-          // seq_geleert only when the core ACCEPTED the unload (receipt 1..3); a refusal (deck_hoerbar, nicht_geladen) or no receipt reports nothing, and the guard is lifted so a retry sends again
-          let geleert = typ === 'seq' && /\/(fader|trim)$/.test(pfad) && this.seqDeckAufraeumen(platz, this.quelle(), true);
-          if (geleert) {
-            const eintrag = this.seqEntladen.get(platz);
-            const q = eintrag ? await this.warteQuittung(eintrag.id) : null;
-            if (!q || ![1, 2, 3].includes(q.status)) { this.seqEntladen.delete(platz); geleert = false; }
-          }
-          return this.json(a, 409, { fehler: 'kein_hoerschein', text: 'channel is closed; opening needs a valid hearing check (Ohr)',
-            urteil: letzterSchein?.urteil ?? null, gruende: letzterSchein?.gruende ?? [], ...(geleert ? { seq_geleert: true } : {}) });
-        }
-        hoerscheinId = schein.hs_id;
-      }
-    }
-    const proTakt = this.proTakt();   // read once per request
-    let abBeat = this.abVon(ab), verschobenAuf: number | undefined;
-    const id = Number(++this.id);
-    if (this.quelle() === 'cypher') {
-      const beat = this.kern.uhr?.beat ?? 0;
-      const offen = (this.fahrtEnde.get(pfad) ?? []).filter((e) => e.ab + e.dauer >= beat);   // Abgelaufenes räumt sich hier ab (keyed by the path as asked: the alias for erz/<n>)
-      const frei = ersterFreierBeat(offen, abBeat, takte * proTakt);
-      if (frei !== abBeat) { abBeat = frei; verschobenAuf = frei; }
-      offen.push({ id, ab: abBeat, dauer: takte * proTakt });
-      this.fahrtEnde.set(pfad, offen);
-    }
-    // Keylock 3b (NITPICK): der Knopf mit Politik 1 (zu spät -> sofort ausgeführt, Quittung 5 statt 4 zu_spaet)
-    const felder = { id, quelle: this.quelle(), plan: this.planVon(), teil: 0, pfad: kernPfad, ab_beat: abBeat,
-      dauer_beats: takte * proTakt, nach: kernWert, form: form === 's' ? 1 : 0, politik: pfad === 'keylock' || pfad === 'color/art' ? 1 : 0, gruppe: '', hoerschein: hoerscheinId };
-    this.kern.sende('/k/teil', felder);
-    this.gesendet++;
-    this.json(a, 200, { ok: true, felder, ...(verschobenAuf !== undefined ? { verschoben_auf: verschobenAuf } : {}),
-      quittung: await this.warteQuittung(felder.id, verschobenAuf !== undefined ? undefined : felder.ab_beat) });   // verschoben: nur das kurze Fenster (Sofort-Ablehnungen des Kerns), nicht bis zum Startbeat
-  }
-
-  // erz/<n>/komp/* and the knobs of a bk effect graph live in a project insert of the strom track: the value goes through the project as the caller's
-  // source (undo, save); a ramp has no row to ride on, so takte must be 0 (the insert rows were `ueber_projekt` for ramps already).
-  private async aliasInsert(al: Extract<AliasErgebnis, { art: 'insert' }>, pfad: string, nach: number, takte: unknown, a: http.ServerResponse): Promise<void> {
-    if (takte !== 0) return this.json(a, 409, { fehler: 'rampe_ueber_projekt', text: `${pfad} is a project insert value: it is set, not ramped (takte 0)` });
-    const o = this.proj.zugang.offen();
-    const ins = o?.projekt.spuren.find((s) => s.id === al.spur_id)?.inserts?.find((i) => i.art === al.insert);
-    if (!o || !ins) return this.json(a, 409, { fehler: al.insert === 'komp' ? 'keine_komp_stufe' : 'kein_graph', text: 'the insert is gone' });
-    const befehl = al.param === 'an' ? { befehl: 'insert_an', insert_id: ins.id, an: nach >= 0.5 }
-      : { befehl: 'insert_param_setzen', insert_id: ins.id, param: al.param, wert: nach };
-    const r = await this.proj.sitzung.aendern({ rev: o.projekt.rev, label: `Strom ${al.strom} ${pfad.split('/').slice(2).join('/')}`, befehle: [befehl] }, this.quelle() as 'andreas' | 'cypher');
-    if (r.code !== 200) return this.json(a, r.code, r.j);
-    this.json(a, 200, { ok: true, insert_id: ins.id, param: al.param, wert: nach });
-  }
-  // The kind of the graph on a channel for the alias resolver: the loaded graph (instrument or effect), or an effect graph that sits as a bk insert on the strom track
-  private graphArt(kanal: string): 'instrument' | 'effekt' | null {
-    const name = this.stand.graphen_geladen[kanal] ?? '';
-    if (name !== '') return findeGraph(name)?.art === 'instrument' ? 'instrument' : 'effekt';
-    const n = /^erz\/(\d+)$/.exec(kanal)?.[1];
-    const o = this.proj.zugang.offen();
-    const s = n && o ? stromSpur(o.projekt, Number(n)) : undefined;
-    return s?.inserts?.some((i) => i.art === 'bk') ? 'effekt' : null;
-  }
-  // The row the core knows for an automation target: the path itself, or the strom row of an erz/<n> alias. null: no plain row (no strom track, insert).
-  private kernPfadVon(pfad: string): string | null {
-    const al = loeseAlias(this.proj.zugang.offen()?.projekt ?? null, pfad, (k) => this.graphArt(k));
-    if (al.art === 'keiner') return pfad;
-    return al.art === 'zeile' ? al.pfad : null;
-  }
-  // POST /spur targets: an erz/<n> alias must resolve onto a plain strom row now (checked at the start; resolved again where the part is sent)
-  private spurAliasFehler(fahrten: { ziel: string }[]): Record<string, unknown> | null {
-    for (const [index, f] of fahrten.entries()) {
-      if (!/^erz\//.test(f.ziel)) continue;
-      const al = loeseAlias(this.proj.zugang.offen()?.projekt ?? null, f.ziel, (k) => this.graphArt(k));
-      if (al.art === 'fehler') return { fehler: al.code, ziel: f.ziel, index, text: al.text };
-      if (al.art === 'insert') return { fehler: 'kein_alias_ziel', ziel: f.ziel, index, text: 'an automation track moves plain strom rows only (not an insert value)' };
-    }
-    return null;
-  }
-
-  // Plan seq-fader-frei: the places of the open LIVE project that carry a SEQ deck, and the places with a track on the deck player
-  // (same expressions as /hoeren)
-  private seqPlaetzeOffen(): { seq: Set<number>; geladen: Set<number> } {
-    const op = this.proj.zugang.offen();
-    const seq = new Set<number>(op?.projekt.live ? OFFENE_DECKS.filter((n) => seqGruppe(op.projekt, n) !== undefined) : []);
-    const geladen = new Set<number>(OFFENE_DECKS.filter((n) => this.deckStand(n) !== null));
-    return { seq, geladen };
-  }
+  private harmonieTakte(...a: Parameters<typeof RG.harmonieTakte>) { return RG.harmonieTakte.call(this, ...a); }
+  private abVon(...a: Parameters<typeof RG.abVon>) { return RG.abVon.call(this, ...a); }
+  private rampePflicht(...a: Parameters<typeof RG.rampePflicht>) { return RG.rampePflicht.call(this, ...a); }
+  private regler(...a: Parameters<typeof RG.regler>) { return RG.regler.call(this, ...a); }
+  private aliasInsert(...a: Parameters<typeof RG.aliasInsert>) { return RG.aliasInsert.call(this, ...a); }
+  private graphArt(...a: Parameters<typeof RG.graphArt>) { return RG.graphArt.call(this, ...a); }
+  private kernPfadVon(...a: Parameters<typeof RG.kernPfadVon>) { return RG.kernPfadVon.call(this, ...a); }
+  private spurAliasFehler(...a: Parameters<typeof RG.spurAliasFehler>) { return RG.spurAliasFehler.call(this, ...a); }
+  private seqPlaetzeOffen(...a: Parameters<typeof RG.seqPlaetzeOffen>) { return RG.seqPlaetzeOffen.call(this, ...a); }
 
   // Plan seq-fader-frei D6/D9: a place that becomes a SEQ deck may still hold a STOPPED track with its channel closed; that track would keep the
   // I3a lock on deck/N. Eject it from the deck player (/k/deck/entladen). Never a playing track, never with an open channel. True iff the unload was
@@ -2129,48 +548,11 @@ export class Oberflaeche {
   // of 2026-11-18); it never ejects a track that arrived while the page server was watching (a load of Andreas after the SEQ deck), and no path ejects a
   // track with a start planned by Andreas: /zustand/deck has no "start planned" status (it reads 1), the unload would cancel the start.
   private readonly seqNachgeladen = new Set<number>();
-  private merkeNachgeladen(z: Record<string, unknown>): void {
-    const n = Number(z.deck), vor = this.stand.decks[String(n)] as Record<string, unknown> | undefined;
-    if (!(Number(z.status) >= 1)) this.seqNachgeladen.delete(n);
-    else if (vor !== undefined && (!(Number(vor.status) >= 1) || Oberflaeche.deckSchluessel(vor) !== Oberflaeche.deckSchluessel(z))) this.seqNachgeladen.add(n);
-  }
+  private merkeNachgeladen(...a: Parameters<typeof RG.merkeNachgeladen>) { return RG.merkeNachgeladen.call(this, ...a); }
   private readonly startGeplant = new Map<number, number>();   // deck -> ab_beat of the last start sent by the page (any source)
-  private startSteht(n: number): boolean {
-    const ab = this.startGeplant.get(n);
-    if (ab === undefined) return false;
-    if ((this.kern.uhr?.beat ?? 0) <= ab + 1) return true;
-    this.startGeplant.delete(n);
-    return false;
-  }
-  private seqDeckAufraeumen(n: number, quelle: string, spaet: boolean): boolean {
-    if (!this.seqPlaetzeOffen().seq.has(n)) return false;
-    if ((spaet && this.seqNachgeladen.has(n)) || this.startSteht(n)) return false;
-    const st = this.deckStand(n);
-    if (st === null || Number(st.z.status) >= 2 || kanalOffen(this.stand.regler, pultContainerPfad[n - 1])) return false;
-    const schluessel = `${Oberflaeche.deckSchluessel(st.z)}|${Number(st.z.status)}`;
-    const vorher = this.seqEntladen.get(n);
-    if (vorher && vorher.schluessel === schluessel && Date.now() - vorher.t < 5000) return false;
-    let id = 0;
-    try {
-      id = Number(++this.id);
-      this.kern.sende('/k/deck/entladen', { id, quelle, deck: n });
-    } catch (e) {
-      this.opt.log?.({ typ: 'seq_aufraeumen_fehler', deck: n, text: (e as Error).message });
-      return false;   // a failed send is no error of the SEQ write or of the fader call
-    }
-    this.gesendet++;
-    this.seqEntladen.set(n, { schluessel, t: Date.now(), id });
-    this.opt.log?.({ typ: 'seq_aufgeraeumt', deck: n });
-    return true;
-  }
-
-  // Plan seq-fader-frei D4: a SEQ deck sits on place n and a part of Cypher on deck/n/fader or deck/n/trim is planned or running
-  // (fahrtEnde holds Cypher's parts only)
-  private seqRampeLaeuft(n: number): boolean {
-    if (!this.seqPlaetzeOffen().seq.has(n)) return false;
-    const beat = this.kern.uhr?.beat ?? 0;
-    return [`deck/${n}/fader`, `deck/${n}/trim`].some((pfad) => (this.fahrtEnde.get(pfad) ?? []).some((e) => e.ab + e.dauer >= beat));
-  }
+  private startSteht(...a: Parameters<typeof RG.startSteht>) { return RG.startSteht.call(this, ...a); }
+  private seqDeckAufraeumen(...a: Parameters<typeof RG.seqDeckAufraeumen>) { return RG.seqDeckAufraeumen.call(this, ...a); }
+  private seqRampeLaeuft(...a: Parameters<typeof RG.seqRampeLaeuft>) { return RG.seqRampeLaeuft.call(this, ...a); }
 
   // Studio S6: laufende Automationsspuren (Name → Lauf) und die fahrbaren Surge-Parameter (surge_bereiche.json)
   private readonly spuren = new Map<string, SpurLauf>();
@@ -2188,1053 +570,51 @@ export class Oberflaeche {
     void eintrag.then(() => { if (this.wirtImFlug.get(name) === eintrag) this.wirtImFlug.delete(name); });
     return p;
   }
-  // A new run of a name waits until the previous run's in-flight wirt call (fahre answer and halte) has settled; bounded by the wirtRuf timeout
-  private async wirtFlugAbwarten(name: string): Promise<void> {
-    const f = this.wirtImFlug.get(name);
-    if (!f) return;
-    await Promise.race([f, new Promise((r) => setTimeout(r, 3000))]);
-  }
-
-  private wirtBasis(): string { return this.opt.wirtOrdner ?? wirtOrdnerVorgabe(); }
-  private wirtSock(gruppe: string): string { return path.join(this.wirtBasis(), `wirt-${gruppe}.sock`); }
-
-  // F2: laufende Spuren überstehen den Neustart des Seiten-Servers. Nach jeder Änderung atomar nach <wirtBasis>/spuren.json
-  // (tmpfs wie die Wirt-Sockets); beim Start geladen. Abgelaufene Spuren räumt spurenAufraeumen ab, sobald die Uhr da ist.
-  private spurenSichern(): void {
-    const datei = path.join(this.wirtBasis(), 'spuren.json');
-    const daten = [...this.spuren].map(([name, l]) => ({ name, quelle: l.quelle, anker: l.anker, ende: l.ende, fahrten: l.fahrten, gruppen: [...l.gruppen],
-      ids: l.ids, teile: l.teile, muster: l.offen, ...(l.schleife ? { schleife: l.schleife } : {}), ...(l.bogen ? { bogen: l.bogen } : {}) }));
-    try {
-      fs.mkdirSync(this.wirtBasis(), { recursive: true });
-      const tmp = `${datei}.${process.pid}.neu`;
-      fs.writeFileSync(tmp, JSON.stringify(daten));
-      fs.renameSync(tmp, datei);
-    } catch (e) { this.opt.log?.({ typ: 'spuren_sichern_fehler', fehler: (e as Error).message }); }
-  }
-
-  private spurenLaden(): void {
-    let daten: unknown;
-    try { daten = JSON.parse(fs.readFileSync(path.join(this.wirtBasis(), 'spuren.json'), 'utf8')); } catch { return; }
-    if (!Array.isArray(daten)) return;
-    for (const x of daten as Record<string, unknown>[]) {
-      if (typeof x?.name !== 'string' || !SPUR_NAME.test(x.name) || this.spuren.has(x.name) || !Number.isFinite(x.anker) || !Number.isFinite(x.ende)) continue;
-      const muster = (Array.isArray(x.muster) ? x.muster : []).filter((m: MusterPlan) => Number.isFinite(m?.ab_beat) && typeof m?.text === 'string' && (ALLE_STROEME as readonly number[]).includes(m?.strom));
-      const lauf: SpurLauf = { quelle: x.quelle === 'cypher' ? 'cypher' : 'andreas', anker: Number(x.anker), ende: Number(x.ende), fahrten: Array.isArray(x.fahrten) ? x.fahrten as Fahrt[] : [], timer: [], offen: muster,
-        gruppen: new Set((Array.isArray(x.gruppen) ? x.gruppen : []).filter((g: unknown) => g === 'bass' || g === 'melodie') as string[]),
-        ids: Array.isArray(x.ids) ? x.ids.filter(Number.isFinite) : [], teile: Array.isArray(x.teile) ? x.teile : [] };
-      const schleife = schleifeAusDatei(x.schleife);   // 1.12 S7: a loop resumes its watcher from the next unsent pass
-      if (schleife) lauf.schleife = schleife;
-      const bg = x.bogen as SpurLauf['bogen'] | undefined;
-      if (bg && typeof bg.name === 'string' && Number.isFinite(bg.takte) && Array.isArray(bg.plan)) lauf.bogen = bg;
-      this.spuren.set(x.name, lauf);
-      if (lauf.offen.length) this.musterTimer(x.name, lauf);
-      if (lauf.schleife) this.schleifenWaechter(x.name, lauf);
-    }
-    if (this.spuren.size) this.opt.log?.({ typ: 'spuren_geladen', anzahl: this.spuren.size });
-  }
-
-  // POST /spur {spur, ab?='takt'} (Studio S6): Anker = nächste Takt- bzw. Phrasen-Eins; Kanalzug-Fahrten als /k/teil mit
-  // Plan spur:<name> (ein Handgriff bricht sie im Kern ab, /spur/stopp über /k/abbruch). D8 gilt für Cyphers Spur ganz.
-  // intern.versatz (live scene restore only): phase offset per stream for the strom: moves of this track
-  private async spurStart(d: Record<string, unknown>, a: http.ServerResponse, intern: { versatz?: Record<number, number>; bogen?: SpurLauf['bogen'] } = {}): Promise<void> {
-    const ab = d.ab ?? 'takt';
-    if (ab !== 'takt' && ab !== 'phrase') return this.json(a, 400, { fehler: 'ab', text: 'ab: takt or phrase' });
-    // 1.1 anchor: anker_takt = an absolute bar instead of ab; probe = every check, nothing sent, nothing entered
-    const ankerTakt = d.anker_takt, probe = d.probe === true;
-    if (d.probe !== undefined && typeof d.probe !== 'boolean') return this.json(a, 400, { fehler: 'probe', text: 'probe: boolean' });
-    if (ankerTakt !== undefined) {
-      if (d.ab !== undefined) return this.json(a, 400, { fehler: 'ab_und_anker', text: 'ab and anker_takt exclude each other' });
-      if (typeof ankerTakt !== 'number' || !Number.isInteger(ankerTakt) || ankerTakt < 1) return this.json(a, 400, { fehler: 'anker_takt', text: 'anker_takt: integer >= 1 (an absolute bar)' });
-    }
-    const r = pruefeSpur(d.spur, this.fahrbar);
-    if ('fehler' in r) return this.json(a, 400, { fehler: 'spur', text: r.fehler });
-    // D1 S2-Integration (Spec 6.22, 6.30): Spur-Regler ändern sich nur über das Projekt, auch eine Automationsspur fährt sie nicht
-    const ueber = r.spur.fahrten.findIndex((f) => ueberProjekt(f.ziel) && !istStromZeile(this.proj.zugang.offen()?.projekt ?? null, f.ziel));
-    if (ueber >= 0) {
-      return this.json(a, 409, { fehler: 'ueber_projekt', ziel: r.spur.fahrten[ueber].ziel, index: ueber,
-        text: `${ueberProjektText(r.spur.fahrten[ueber].ziel)}, not by an automation track` });
-    }
-    const aliasFehler = this.spurAliasFehler(r.spur.fahrten);
-    if (aliasFehler) return this.json(a, 409, aliasFehler);
-    this.spurenAufraeumen();
-    const quelle = this.quelle(), name = r.spur.name;
-    if (quelle === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
-    if (this.spuren.has(name)) return this.json(a, 409, { fehler: 'laeuft', text: `track ${name} is running; stop it first` });
-    await this.wirtFlugAbwarten(name);   // the previous run's late fahre/halte first, then this run's fahre
-    if (this.spuren.has(name)) return this.json(a, 409, { fehler: 'laeuft', text: `track ${name} is running; stop it first` });
-    const u = this.kern.uhr as unknown as { beat: number; bpm: number; mono_ns: number } | null;
-    if (!u) return this.json(a, 409, { fehler: 'keine_uhr' });
-    const fruehest = this.abVon('takt'), proTaktA = this.proTakt();
-    let anker = this.abVon(ab);
-    if (typeof ankerTakt === 'number') {
-      anker = proTaktA * (ankerTakt - 1);
-      if (anker < fruehest) return this.json(a, 409, { fehler: 'anker_vorbei', fruehester_takt: Math.floor(fruehest / proTaktA) + 1, text: 'the requested anchor bar is no longer ahead; use fruehester_takt or later' });
-      if (anker - fruehest > proTaktA * MAX_TAKT) return this.json(a, 400, { fehler: 'anker_takt', text: `anker_takt: at most ${MAX_TAKT} bars ahead` });
-    }
-    // 1.1: a stream played by the multi-stream erzeuger needs its process, else the pattern would never sound
-    for (const f of r.spur.fahrten) {
-      const st = STROM_ZIEL.exec(f.ziel);
-      if (st && istBkStrom(Number(st[1])) && !this.erzeugerLebt(Number(st[1]))) {
-        return this.json(a, 409, { fehler: 'strom_ohne_erzeuger', strom: Number(st[1]), ziel: f.ziel, text: `no erzeuger process serves stream ${st[1]}; start djk-stroeme first` });
-      }
-    }
-    const schleife = r.spur.schleife_takte !== undefined;   // 1.12 S7: pass 0 of a loop; its end is the start of pass 1
-    const g = schleife ? planeDurchlauf(r.spur, anker, 0, 0, this.proTakt()) : plane(r.spur, anker, this.proTakt(), this.fahrbar);
-    // task 7.5: the spur of an arc ends with the arc, also when the last layer has no bis_takt (warte bis: spur_ende)
-    if (intern.bogen) g.ende_beat = Math.max(g.ende_beat, anker + proTaktA * intern.bogen.takte);
-    if (quelle === 'cypher') {
-      const rampe = r.spur.fahrten.findIndex((f) => typeof f.nach === 'number' && this.rampePflicht(f.ziel, f.nach, f.takte ?? 0, f.von));
-      if (rampe >= 0) return this.json(a, 409, { fehler: 'nur_rampe', ziel: r.spur.fahrten[rampe].ziel, index: rampe, text: GRUND_TEXT.nur_rampe });
-      // F4: AUTO aus auf einem Strom heißt, Andreas hält ihn; Cyphers Spur darf ihn nicht berühren (Kern, Wirt, Muster)
-      for (const f of r.spur.fahrten) {
-        const st = this.stromVonZielOffen(f.ziel);
-        if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: st, ziel: f.ziel, text: 'AUTO is off: Andreas holds this stream' });
-      }
-      // 1.12 S7: for a loop over two passes, so that the seam (end of pass k → start of pass k+1) is checked from the start
-      const p = oeffnetKanal(this.stand.regler, schleife ? [...g.teile, ...planeDurchlauf(r.spur, g.ende_beat, 0, 0, this.proTakt()).teile] : g.teile);
-      if (p) return this.json(a, 409, { fehler: 'kein_hoerschein', pfad: p, text: 'this track opens a closed channel; Cypher may not (Plan Hand D8)' });
-    }
-    if (probe) {
-      return this.json(a, 200, { ok: true, probe: true, anker_beat: anker, anker_takt: Math.floor(anker / proTaktA) + 1, ende_beat: g.ende_beat,
-        muster: g.muster.map((m) => ({ strom: m.strom, ab_takt_absolut: Math.floor(m.ab_beat / proTaktA) + 1 })) });
-    }
-    const offen = g.muster.map((m) => (intern.versatz?.[m.strom] ? { ...m, versatz: intern.versatz[m.strom] } : m));
-    const lauf: SpurLauf = { quelle, anker, ende: g.ende_beat, fahrten: r.spur.fahrten, timer: [], offen, gruppen: new Set(), ids: [], teile: [] };
-    if (intern.bogen) lauf.bogen = intern.bogen;
-    if (schleife) {   // 1.12 S7: set before the track enters the table, so it never looks like a one-shot track (cleanup, GET /spur)
-      lauf.schleife = { n: r.spur.schleife_takte as number, anker_naechster: g.ende_beat, durchlauf: 1, teilNr: g.teile.length, naechste: null,
-        durchlaeufe: [{ k: 0, anfang: anker, ende: g.ende_beat, teile: g.teile.length, ...(this.proTakt() !== 4 ? { proTakt: this.proTakt() } : {}) }] };
-    }
-    this.spuren.set(name, lauf);
-    this.spurenSichern();
-    // Surge-Fahrten zuerst: scheitert ein Wirt, ist noch nichts beim Kern und die schon belegten Wirte halten an
-    for (const w of g.wirt) {
-      const befehl: Record<string, unknown> = { befehl: 'fahre', name: w.name, bis: w.bis, dauer: w.dauer_beats * 60 / u.bpm,
-        ab: beatZuMono(u, w.ab_beat), spur: name, form: w.form, ...(w.von !== undefined ? { von: w.von } : {}) };
-      // In-flight unit like sendeDurchlauf: a STOP during this await deleted the run before the group was recorded, so its halte missed
-      // this wirt; the late fahre is held here, and a new run of the name waits for it (wirtFlugAbwarten)
-      const antwort = await this.wirtFlug(name, async () => {
-        const r = await wirtRuf(this.wirtSock(w.gruppe), befehl);
-        if (this.spuren.get(name) !== lauf && r.ok) await wirtRuf(this.wirtSock(w.gruppe), { befehl: 'halte', spur: name });
-        return r;
-      });
-      if (this.spuren.get(name) !== lauf) {   // stopped while waiting: no core part may follow the STOP's /k/abbruch
-        for (const gr of lauf.gruppen) await wirtRuf(this.wirtSock(gr), { befehl: 'halte', spur: name });
-        return this.json(a, 409, { fehler: 'gestoppt', name, text: `track ${name} was stopped while it started` });
-      }
-      if (!antwort.ok) {
-        for (const gr of lauf.gruppen) await wirtRuf(this.wirtSock(gr), { befehl: 'halte', spur: name });
-        this.spuren.delete(name);
-        this.spurenSichern();
-        return this.json(a, 409, { fehler: 'wirt', gruppe: w.gruppe, text: String(antwort.fehler ?? '') });
-      }
-      lauf.gruppen.add(w.gruppe);
-      this.opt.log?.({ typ: 'spur_wirt', name, gruppe: w.gruppe, parameter: w.name, ab_beat: w.ab_beat, ab: befehl.ab });
-      if (Number(antwort.ersetzt) > 0) this.opt.log?.({ typ: 'spur_wirt_ersetzt', name, gruppe: w.gruppe, parameter: w.name, ersetzt: Number(antwort.ersetzt) });   // F8: eine andere wartende Fahrt ging verloren
-    }
-    // Discrete Surge sets: one host `setze` per host and beat, same in-flight unit as fahre; the group is recorded, so spur_stopp and Stop Cypher halte it
-    for (const z of g.setzen ?? []) {
-      const befehl = { befehl: 'setze', werte: z.werte, ab: beatZuMono(u, z.ab_beat), spur: name };
-      const antwort = await this.wirtFlug(name, async () => {
-        const r = await wirtRuf(this.wirtSock(z.gruppe), befehl);
-        if (this.spuren.get(name) !== lauf && r.ok) await wirtRuf(this.wirtSock(z.gruppe), { befehl: 'halte', spur: name });
-        return r;
-      });
-      if (this.spuren.get(name) !== lauf) {
-        for (const gr of lauf.gruppen) await wirtRuf(this.wirtSock(gr), { befehl: 'halte', spur: name });
-        return this.json(a, 409, { fehler: 'gestoppt', name, text: `track ${name} was stopped while it started` });
-      }
-      if (!antwort.ok) {
-        for (const gr of lauf.gruppen) await wirtRuf(this.wirtSock(gr), { befehl: 'halte', spur: name });
-        this.spuren.delete(name);
-        this.spurenSichern();
-        return this.json(a, 409, { fehler: 'wirt', gruppe: z.gruppe, text: String(antwort.fehler ?? '') });
-      }
-      lauf.gruppen.add(z.gruppe);
-      this.opt.log?.({ typ: 'spur_wirt_setze', name, gruppe: z.gruppe, parameter: Object.keys(z.werte), ab_beat: z.ab_beat, ab: befehl.ab });
-    }
-    for (const [i, t] of g.teile.entries()) {
-      const kernPfad = this.kernPfadVon(t.pfad);
-      if (kernPfad === null) { this.opt.log?.({ typ: 'spur_ziel_aufgeloest_nicht', name, pfad: t.pfad }); continue; }   // the strom track is gone since the start
-      const felder = { id: Number(++this.id), quelle, plan: `spur:${name}`, teil: i, pfad: kernPfad, ab_beat: t.ab_beat,
-        dauer_beats: t.dauer_beats, nach: t.nach, form: t.form, politik: t.politik, gruppe: '', hoerschein: '' };
-      this.kern.sende('/k/teil', felder);
-      this.gesendet++;
-      lauf.ids.push(felder.id);
-      lauf.teile.push({ id: felder.id, teil: i, pfad: t.pfad });
-    }
-    if (lauf.offen.length) this.musterTimer(name, lauf);
-    if (lauf.schleife) this.schleifenWaechter(name, lauf);
-    this.spurenSichern();
-    this.opt.log?.({ typ: 'spur', name, quelle, anker, teile: g.teile.length, wirt: g.wirt.length, muster: g.muster.length });
-    const quittung = lauf.ids.length ? await this.warteQuittung(lauf.ids[0], g.teile[0].ab_beat) : null;
-    this.json(a, 200, { ok: true, name, anker_beat: anker, anker_takt: Math.floor(anker / this.proTakt()) + 1, ende_beat: g.ende_beat,
-      teile: g.teile.length, wirt: g.wirt.length, muster: g.muster.length, quittung, abgelehnt: this.spurAbgelehnt(lauf) });
-  }
-
-  // Strand 11 slice 5 (5.2): POST /szene, live scenes (files in <project folder>/szenen/, not the launcher scenes of project.json `szenen`).
-  // aktion sichern | ersetzen | laden | liste | zeige | loeschen. laden saves _vor_laden first, loads differing graphs at once, then runs ONE
-  // internal track szene-<name> as Cypher from the next bar: strom:<n> moves (with versatz), control sets or ramps, the Surge patch as host setze.
-  // A part a Cypher rule refuses goes into ausgelassen [{ziel, grund}]; nothing else stops.
-  private innenAntwort(): { code: number; text: string; writeHead(c: number): unknown; end(t: string): void; j(): Record<string, unknown> } {
-    return { code: 0, text: '', writeHead(c: number) { this.code = c; return this; }, end(t: string) { this.text = t; },
-      j() { try { return JSON.parse(this.text) as Record<string, unknown>; } catch { return {}; } } };
-  }
-  // B1: a POST route with reading aktionen (/szene, /klang) is classed by the x-djk-aktion header; a body aktion that differs from it is refused,
-  // so a call classed as reading (liste, zeige) cannot carry a writing aktion in its body.
-  private aktionPasst(q: http.IncomingMessage, d: Record<string, unknown>, a: http.ServerResponse): boolean {
-    const kopf = kopfWert(q.headers['x-djk-aktion']);
-    if (kopf === null || d.aktion === kopf) return true;
-    this.json(a, 403, { fehler: 'aktion_passt_nicht', kopf, aktion: typeof d.aktion === 'string' ? d.aktion : null, text: GRUND_TEXT.aktion_passt_nicht });
-    return false;
-  }
-  private async szeneSammeln(): Promise<Szene> {
-    const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
-    const proTakt = this.proTakt();
-    const muster: Record<string, string> = {}, versatz: Record<string, number> = {};
-    for (const st of ALLE_STROEME) {
-      const t = leseMusterStand(this.musterOrdner(st)).text;
-      if (typeof t === 'string' && t.trim() !== '') muster[String(st)] = t;
-      const v = leseVersatz(this.musterOrdner(st));
-      if (v !== 0) versatz[String(st)] = v;
-    }
-    const anker: Record<string, number> = {}, bezeichnung: Record<string, string> = {};
-    for (const st of Object.keys(muster)) {
-      const t = this.musterAnkerTakt.get(Number(st)); if (t !== undefined) anker[st] = t;
-      const b = leseMusterStand(this.musterOrdner(Number(st))).bezeichnung; if (typeof b === 'string' && b !== '') bezeichnung[st] = b;
-    }
-    const klang: Record<string, SzeneKlang> = {};
-    // B2: both Surge hosts at once (a dead host costs its timeout once, not twice)
-    const zustaende = await Promise.all(KLANG_GRUPPEN.map((g) => wirtRuf(this.wirtSock(g), { befehl: 'zustand' }, 1500)));
-    KLANG_GRUPPEN.forEach((g, i) => { const r = zustaende[i]; if (r.ok && typeof r.patch_b64 === 'string') klang[g] = { art: 'surge', patch_b64: r.patch_b64 }; });
-    this.spurenAufraeumen();
-    const spuren: SzeneSpur[] = [...this.spuren].filter(([, l]) => l.quelle === 'cypher' && l.schleife)
-      .map(([name, l]) => ({ name, fahrten: l.fahrten, schleife_takte: (l.schleife as { n: number }).n }));
-    const lage = this.lage();
-    return { v: 1, geschrieben: new Date().toISOString(), takt: Math.floor((u?.beat ?? 0) / proTakt) + 1, bpm: u?.bpm ?? null, muster,
-      ...(Object.keys(versatz).length ? { versatz } : {}), ...(Object.keys(anker).length ? { anker } : {}), ...(Object.keys(bezeichnung).length ? { bezeichnung } : {}),
-      regler: reglerFuerSzene(this.stand.regler, ueberProjekt), graphen: Object.fromEntries(Object.entries(this.stand.graphen_geladen).filter(([, n]) => !!n)),
-      fx: structuredClone(this.stand.fx), fx_zuweisung: structuredClone(this.stand.fxZuweisung), fx_routing: this.stand.fxRouting, klang, spuren,
-      info: { plaetze: lage.plaetze ?? null, decks: lage.decks ?? null } };
-  }
-  private async szene(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const aktion = d.aktion;
-    if (typeof aktion !== 'string' || !['sichern', 'ersetzen', 'laden', 'liste', 'zeige', 'loeschen'].includes(aktion)) {
-      return this.json(a, 400, { fehler: 'aktion', text: 'aktion: sichern, ersetzen, laden, liste, zeige or loeschen' });
-    }
-    const offen = this.proj.zugang.offen();
-    if (!offen || offen.projekt.live !== true) return this.json(a, 409, { fehler: 'kein_liveprojekt', text: 'live scenes belong to the open live project' });
-    const ordner = offen.ordner;
-    if (aktion === 'liste') return this.json(a, 200, { ok: true, szenen: listeSzenen(ordner) });
-    const name = d.name;
-    if (typeof name !== 'string' || !SZENE_NAME.test(name)) return this.json(a, 400, { fehler: 'name', text: 'name must match [a-z0-9_-]{1,32}' });
-    if (aktion === 'sichern' || aktion === 'ersetzen') {
-      if (aktion === 'sichern' && !istAutomatisch(name) && szeneDa(ordner, name)) return this.json(a, 409, { fehler: 'szene_vorhanden', name, text: GRUND_TEXT.szene_vorhanden });
-      const s = await this.szeneSammeln();
-      // A3: a silence over silence would replace the sound to come back to; automatic names keep three generations
-      if (name === '_vor_stille' && allesStill(s)) return this.json(a, 200, { ok: true, name, geschrieben: false, grund: 'schon_still' });
-      if (AUTO_ROTIERT.includes(name)) schreibeAutomatisch(ordner, name, s); else schreibeSzene(ordner, name, s);
-      this.opt.log?.({ typ: 'szene_sichern', name, quelle: this.quelle(), takt: s.takt });
-      return this.json(a, 200, { ok: true, name, takt: s.takt, muster: Object.keys(s.muster).map(Number), regler: Object.keys(s.regler).length,
-        graphen: Object.keys(s.graphen), klang: Object.keys(s.klang), spuren: s.spuren.map((x) => x.name) });
-    }
-    const s = leseSzene(ordner, name);
-    if (!s) return this.json(a, 404, { fehler: 'szene_unbekannt', name, text: GRUND_TEXT.szene_unbekannt });
-    if (aktion === 'zeige') {   // B8: the patch itself is not shown, only its length in bytes
-      const klang = Object.fromEntries(Object.entries(s.klang ?? {}).map(([g, k]) => {
-        const { patch_b64, ...rest } = k ?? { art: '' };
-        return [g, { ...rest, ...(typeof patch_b64 === 'string' ? { patch_bytes: Buffer.from(patch_b64, 'base64').length } : {}) }];
-      }));
-      return this.json(a, 200, { ok: true, name, szene: { ...s, klang } });
-    }
-    if (aktion === 'loeschen') {
-      loescheSzene(ordner, name);
-      this.opt.log?.({ typ: 'szene_loeschen', name, quelle: this.quelle() });
-      return this.json(a, 200, { ok: true, name });
-    }
-    const takte = d.takte ?? 0;
-    if (typeof takte !== 'number' || !Number.isInteger(takte) || takte < 0 || takte > SZENE_MAX_TAKTE) return this.json(a, 400, { fehler: 'takte', text: `takte: integer 0..${SZENE_MAX_TAKTE}` });
-    await this.qs.run('cypher', () => this.szeneLaden(name, s, takte, ordner, a));
-  }
-  // The FX part of szene laden: what differs from the live state is sent back, as Cypher. Answers the list of what was restored.
-  // nurPlan: nothing is sent, the answer lists what differs (the answer of laden; the parts go out at the anchor, B7)
-  private szeneFxLaden(s: Szene, ausgelassen: { ziel: string; grund: string }[], nurPlan = false): string[] {
-    const fertig: string[] = [];
-    const fang = (): { fang: ReturnType<Oberflaeche['innenAntwort']>; ok: () => boolean } => { const f = this.innenAntwort(); return { fang: f, ok: () => f.code === 200 }; };
-    const riegel = this.innenAntwort();
-    if (this.fxRiegel(riegel as unknown as http.ServerResponse)) {
-      const grund = String(riegel.j().fehler ?? 'fx_gesperrt');
-      if (s.fx_routing !== undefined && s.fx_routing !== this.stand.fxRouting) ausgelassen.push({ ziel: 'fx_routing', grund });
-      const hat = (Array.isArray(s.fx) && s.fx.some((f) => f !== null)) || (Array.isArray(s.fx_zuweisung) && s.fx_zuweisung.some((z) => Object.keys(z ?? {}).length > 0));
-      if (hat) ausgelassen.push({ ziel: 'fx', grund });
-      return fertig;
-    }
-    const routing = s.fx_routing;
-    if ((routing === 'insert' || routing === 'post_fader') && routing !== this.stand.fxRouting) {
-      if (!nurPlan) { this.fxRoutingSenden(routing, this.quelle()); this.fxRoutingWunsch = routing; }
-      fertig.push('routing');
-    }
-    const zu = Array.isArray(s.fx_zuweisung) ? (s.fx_zuweisung as Record<string, boolean>[]) : [];
-    for (let i = 0; i < 3; i++) {
-      const soll = zu[i] ?? {}, ist = this.stand.fxZuweisung[i] ?? {};
-      for (const kanal of new Set([...Object.keys(soll), ...Object.keys(ist)])) {
-        const an = soll[kanal] === true;
-        if (an === (ist[kanal] === true)) continue;
-        if (nurPlan) { fertig.push(`zuweisung:${i + 1}:${kanal}`); continue; }
-        const f = fang();
-        this.fxZuweisung({ einheit: i + 1, kanal, an }, f.fang as unknown as http.ServerResponse);
-        if (f.ok()) fertig.push(`zuweisung:${i + 1}:${kanal}`); else ausgelassen.push({ ziel: `fx_zuweisung:${i + 1}:${kanal}`, grund: String(f.fang.j().fehler ?? `http_${f.fang.code}`) });
-      }
-    }
-    const einheiten = Array.isArray(s.fx) ? (s.fx as (Record<string, unknown> | null)[]) : [];
-    for (let i = 0; i < 2; i++) {
-      const soll = einheiten[i] ?? null, ist = this.stand.fx[i] as Record<string, unknown> | null;
-      // a unit that was off or empty at save time is switched off with its current settings, if it runs now
-      const ziel = soll ?? (ist && ist.an === 1 ? { ...ist, an: 0 } : null);
-      if (!ziel) continue;
-      if (ist && (['art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'] as const).every((k) => ist[k] === ziel[k])) continue;
-      if (nurPlan) { fertig.push(`fx:${i + 1}`); continue; }
-      const f = fang();
-      this.fx({ einheit: i + 1, art: ziel.art, beats: ziel.beats, wet: ziel.wet, param1: ziel.param1, param2: ziel.param2, param3: ziel.param3, an: ziel.an === 1 }, f.fang as unknown as http.ServerResponse);
-      if (f.ok()) fertig.push(`fx:${i + 1}`); else ausgelassen.push({ ziel: `fx:${i + 1}`, grund: String(f.fang.j().fehler ?? `http_${f.fang.code}`) });
-    }
-    return fertig;
-  }
-  // A4: the anchor of a restore = the next bar with at least 1 beat of lead (else the bar after), never before the earliest bar a track may start at
-  private szeneAnkerTakt(): number {
-    const proTakt = this.proTakt(), beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? 0;
-    let takt = Math.ceil(beat / proTakt) + 1;   // absolute bar (1-based) that starts at the next bar line
-    if (proTakt * (takt - 1) - beat < 1) takt++;
-    return Math.max(takt, Math.floor(this.abVon('takt') / proTakt) + 1);
-  }
-  // A4 order: save _vor_laden; load differing graphs (vorgaben false: the knob values come from the scene); stop a running szene-<name>; THEN read the
-  // state fresh, choose the anchor and plan patterns and controls from that state; start the track (one retry on anker_vorbei); Surge setze and FX at the
-  // same anchor, each after a fresh Stop Cypher check.
-  private async szeneLaden(name: string, s: Szene, takte: number, ordner: string, a: http.ServerResponse): Promise<void> {
-    if (this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
-    if (!this.kern.uhr) return this.json(a, 409, { fehler: 'keine_uhr' });
-    if (name !== '_vor_laden') schreibeAutomatisch(ordner, '_vor_laden', await this.szeneSammeln());
-    const ausgelassen: { ziel: string; grund: string }[] = [];
-    // graphs first, as Cypher (their own pre-checks: AUTO, kit mode, erzeuger), without graph defaults
-    const graphen: string[] = [];
-    for (const g of planeGraphen(s, { graphen: this.stand.graphen_geladen })) {
-      const r = await this.graphSetzen({ kanal: g.kanal, name: g.name, vorgaben: false }, 'cypher');
-      if (r.code === 200 && r.j.ok !== false) graphen.push(g.kanal); else ausgelassen.push({ ziel: `graph:${g.kanal}`, grund: String(r.j.fehler ?? r.j.grund ?? `http_${r.code}`) });
-    }
-    const spurName = `szene-${name}`.slice(0, 32);
-    const alt = this.spuren.get(spurName);
-    if (alt && alt.quelle === 'cypher') await this.spurAbbrechen(spurName, alt, 'cypher');   // a restore of the same scene still running
-    if (this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt', graphen, ausgelassen });
-    const proTakt = this.proTakt();
-    // the plan from the state as it is now (the graph loads may have taken seconds)
-    const planen = (ankerTakt: number) => {
-      const jetztMuster: Record<string, string> = {}, jetztVersatz: Record<string, number> = {}, jetztBez: Record<string, string | null> = {};
-      for (const st of ALLE_STROEME) {
-        const stand = leseMusterStand(this.musterOrdner(st)), t = stand.text;
-        if (typeof t === 'string') jetztMuster[String(st)] = t;
-        jetztBez[String(st)] = stand.bezeichnung;
-        const v = leseVersatz(this.musterOrdner(st));
-        if (v !== 0) jetztVersatz[String(st)] = v;
-      }
-      const plan = planeLaden(s, { muster: jetztMuster, regler: this.stand.regler, graphen: this.stand.graphen_geladen, versatz: jetztVersatz, bezeichnung: jetztBez }, takte,
-        (p) => { const e = reglerInfo(p)?.einheit; return e === 'schalter' || e === 'stufe'; }, ankerTakt);
-      const anker = proTakt * (ankerTakt - 1), weg: { ziel: string; grund: string }[] = [];
-      // every move checked on its own with Cypher's rules; a refused one is listed and left out
-      const fahrten: Fahrt[] = [], muster: number[] = [], regler: string[] = [], versatz: Record<number, number> = {};
-      for (const m of plan.muster) {
-        if (istBkStrom(m.strom) && !this.erzeugerLebt(m.strom)) { if (m.text !== 'silence') weg.push({ ziel: `strom:${m.strom}`, grund: 'strom_ohne_erzeuger' }); continue; }
-        if (!leseMusterStand(this.musterOrdner(m.strom)).autonom) { weg.push({ ziel: `strom:${m.strom}`, grund: 'auto_aus' }); continue; }
-        fahrten.push({ ziel: `strom:${m.strom}`, ab_takt: 1, muster: m.text, ...(m.bezeichnung !== undefined ? { bezeichnung: m.bezeichnung } : {}) });
-        if (m.versatz !== 0) versatz[m.strom] = m.versatz;
-        muster.push(m.strom);
-      }
-      let teile = 0;
-      for (const f of plan.regler) {
-        const nach = f.nach as number;
-        const grund = !PFAD.test(f.ziel) ? 'pfad'
-          : reglerInfo(f.ziel)?.nurHand ? 'nur_hand'
-          : ueberProjekt(f.ziel) && !istStromZeile(this.proj.zugang.offen()?.projekt ?? null, f.ziel) ? 'ueber_projekt'
-          : (this.spurAliasFehler([f])?.fehler as string | undefined)
-            ?? (((st) => (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom ? 'auto_aus' : null))(this.stromVonZielOffen(f.ziel)))
-            ?? (this.rampePflicht(f.ziel, nach, f.takte ?? 0) ? 'nur_rampe' : null)
-            ?? (oeffnetKanal(this.stand.regler, plane({ name: 'x', fahrten: [f] }, anker, proTakt).teile) ? 'kein_hoerschein' : null)
-            ?? (teile >= MAX_TEILE ? 'zu_viele' : null);
-        if (grund) { weg.push({ ziel: f.ziel, grund }); continue; }
-        teile++;
-        fahrten.push(f);
-        regler.push(f.ziel);
-      }
-      return { ankerTakt, anker, fahrten, muster, regler, versatz, weg };
-    };
-    let p = planen(this.szeneAnkerTakt());
-    let lauf: SpurLauf | undefined;
-    if (p.fahrten.length) {
-      let fang = this.innenAntwort();
-      await this.spurStart({ spur: { name: spurName, fahrten: p.fahrten }, anker_takt: p.ankerTakt }, fang as unknown as http.ServerResponse, { versatz: p.versatz });
-      if (fang.code === 409 && fang.j().fehler === 'anker_vorbei') {   // the clock moved past the anchor while the track started: once more, fresh
-        p = planen(this.szeneAnkerTakt());
-        fang = this.innenAntwort();
-        await this.spurStart({ spur: { name: spurName, fahrten: p.fahrten }, anker_takt: p.ankerTakt }, fang as unknown as http.ServerResponse, { versatz: p.versatz });
-      }
-      const j = fang.j();
-      if (fang.code !== 200) {
-        ausgelassen.push({ ziel: `spur:${spurName}`, grund: String(j.fehler ?? `http_${fang.code}`) });
-        p.muster.length = 0; p.regler.length = 0;
-      } else {
-        lauf = this.spuren.get(spurName);
-        for (const x of (j.abgelehnt as { pfad: string; grund: string }[] | undefined) ?? []) ausgelassen.push({ ziel: x.pfad, grund: x.grund });
-      }
-    }
-    ausgelassen.push(...p.weg);
-    const { ankerTakt, anker } = p;
-    // B3: a restore without moves still gets its entry, so that Stop Cypher and spur_stopp halte its Surge group and clear its FX timer
-    if (!lauf && !this.spuren.has(spurName)) {
-      lauf = { quelle: 'cypher', anker, ende: anker + proTakt, fahrten: [], timer: [], offen: [], gruppen: new Set(), ids: [], teile: [] };
-      this.spuren.set(spurName, lauf);
-      this.spurenSichern();
-    }
-    // Surge: the stored patch as host setze at the anchor, only where it differs from the patch the host holds now
-    const klang: string[] = [];
-    for (const [g, k] of Object.entries(s.klang ?? {})) {
-      if (!KLANG_GRUPPEN.includes(g) || typeof k?.patch_b64 !== 'string') continue;
-      const st = stromVonZiel(`wirt:${g}/x`);
-      if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) { ausgelassen.push({ ziel: `wirt:${g}`, grund: 'auto_aus' }); continue; }
-      const ist = await wirtRuf(this.wirtSock(g), { befehl: 'zustand' }, 1500);
-      if (ist.ok && ist.patch_b64 === k.patch_b64) continue;
-      if (this.kiGestoppt) { ausgelassen.push({ ziel: `wirt:${g}`, grund: 'ki_gestoppt' }); continue; }
-      const u = this.kern.uhr as unknown as { beat: number; bpm: number; mono_ns: number };
-      const r = await this.wirtFlug(spurName, () => wirtRuf(this.wirtSock(g), { befehl: 'setze', patch_b64: k.patch_b64, ab: beatZuMono(u, anker), spur: spurName }));
-      if (!r.ok) { ausgelassen.push({ ziel: `wirt:${g}`, grund: 'wirt' }); continue; }
-      if (lauf && this.spuren.get(spurName) === lauf) { lauf.gruppen.add(g); this.spurenSichern(); }
-      klang.push(g);
-    }
-    // B7: the FX at the anchor: a timer on the core beat like the pattern timer; Stop Cypher is checked again when it fires
-    const fx = this.szeneFxLaden(s, ausgelassen, true);
-    if (fx.length && lauf) {
-      const meiner = lauf;
-      const zeit = setInterval(() => {
-        if (this.spuren.has(spurName) && this.spuren.get(spurName) !== meiner) { clearInterval(zeit); return; }
-        const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat;
-        if (beat === undefined || beat < anker) return;
-        clearInterval(zeit);
-        if (this.kiGestoppt) { this.opt.log?.({ typ: 'szene_fx', name, fx: [], ausgelassen: [{ ziel: 'fx', grund: 'ki_gestoppt' }] }); return; }
-        const weg: { ziel: string; grund: string }[] = [];
-        const fertig = this.qs.run('cypher', () => this.szeneFxLaden(s, weg));
-        this.opt.log?.({ typ: 'szene_fx', name, fx: fertig, ausgelassen: weg });
-      }, 50);
-      zeit.unref();
-      meiner.timer.push(zeit);
-    }
-    // B5: Cypher loops that run now but are not in the scene stop (never Andreas'); then the stored Cypher loops, by name, from the same bar
-    const namen = new Set((s.spuren ?? []).map((x) => x.name));
-    for (const [n, l] of [...this.spuren]) if (l.quelle === 'cypher' && l.schleife && !namen.has(n)) await this.spurAbbrechen(n, l, 'cypher');
-    for (const sp of s.spuren ?? []) {
-      if (this.spuren.has(sp.name)) continue;
-      const fang = this.innenAntwort();
-      await this.spurStart({ spur: { name: sp.name, fahrten: sp.fahrten, schleife_takte: sp.schleife_takte }, anker_takt: ankerTakt }, fang as unknown as http.ServerResponse);
-      if (fang.code !== 200) ausgelassen.push({ ziel: `spur:${sp.name}`, grund: String(fang.j().fehler ?? `http_${fang.code}`) });
-    }
-    this.opt.log?.({ typ: 'szene_laden', name, anker_takt: ankerTakt, muster: p.muster, regler: p.regler.length, graphen, fx, klang, ausgelassen: ausgelassen.length });
-    this.json(a, 200, { ok: true, name, anker_takt: ankerTakt, muster: p.muster, regler: p.regler, graphen, fx, fx_ab_takt: fx.length ? ankerTakt : null, klang, ausgelassen });
-  }
-
-  // Strand 11 slice 7 (7a): POST /aufbau, stored session setups outside any project (setup.ts; folder aufbauOrdnerVorgabe, file mode 0600).
-  // aktion sichern | ersetzen | laden | liste | zeige | loeschen. sichern takes the running studio: szeneSammeln + the four container faders + tempo +
-  // the graphs of the Baukasten streams. laden, as Cypher: the live container is opened if it is not (its refusal live_laeuft is the answer), the tempo
-  // through the tempo path (a ramp from the next bar), then the scene restore of slice 5 (szeneLaden, takte 2: every continuous row ramps 2 bars, so
-  // nur_rampe never refuses; the setup's graphs written over the scene's). The four container faders go through the control path as 2-bar ramps, not
-  // through the scene's track: a track of Cypher may never open a closed strip (Plan Hand D8), the control path opens a free container (containerFrei)
-  // and asks a track place for its hearing check. That opens the strips that sit at -200 dB after a core restart. loeschen moves the file to papierkorb/.
-  private async aufbau(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const aktion = d.aktion;
-    if (typeof aktion !== 'string' || !['sichern', 'ersetzen', 'laden', 'liste', 'zeige', 'loeschen'].includes(aktion)) {
-      return this.json(a, 400, { fehler: 'aktion', text: 'aktion: sichern, ersetzen, laden, liste, zeige or loeschen' });
-    }
-    const ordner = aufbauOrdnerVorgabe();
-    if (aktion === 'liste') return this.json(a, 200, { ok: true, aufbauten: listeAufbauten(ordner) });
-    const name = d.name;
-    if (typeof name !== 'string' || !AUFBAU_NAME.test(name)) return this.json(a, 400, { fehler: 'name', text: 'name must match [a-z0-9_-]{1,32}' });
-    if (aktion === 'sichern' || aktion === 'ersetzen') {
-      if (aktion === 'sichern' && aufbauDa(ordner, name)) return this.json(a, 409, { fehler: 'aufbau_vorhanden', name, text: GRUND_TEXT.aufbau_vorhanden });
-      const szene = await this.szeneSammeln();
-      const block = aufbauBlock(this.stand.regler, (this.kern.uhr as unknown as { bpm: number } | null)?.bpm, this.stand.graphen_geladen,
-        (k) => { const st = stromVonKanal(k); return st !== null && istBkStrom(st); });
-      schreibeAufbau(ordner, name, { v: 1, geschrieben: new Date().toISOString(), aufbau: block, szene });
-      this.opt.log?.({ typ: 'aufbau_sichern', name, quelle: this.quelle() });
-      const warnung = aufbauWarnung(this.stand.regler);
-      return this.json(a, 200, { ok: true, name, bpm: block.bpm, kanaele: block.kanaele, graphen: block.graphen, muster: Object.keys(szene.muster).map(Number), ...(warnung.length ? { warnung } : {}) });
-    }
-    const auf = leseAufbau(ordner, name);
-    if (!auf) return this.json(a, 404, { fehler: 'aufbau_unbekannt', name, text: GRUND_TEXT.aufbau_unbekannt });
-    if (aktion === 'zeige') {   // like szene zeige: the Surge patch is not shown, only its length in bytes
-      const klang = Object.fromEntries(Object.entries(auf.szene.klang ?? {}).map(([g, k]) => {
-        const { patch_b64, ...rest } = k ?? { art: '' };
-        return [g, { ...rest, ...(typeof patch_b64 === 'string' ? { patch_bytes: Buffer.from(patch_b64, 'base64').length } : {}) }];
-      }));
-      return this.json(a, 200, { ok: true, name, aufbau: { ...auf, szene: { ...auf.szene, klang } } });
-    }
-    if (aktion === 'loeschen') {
-      const ziel = loescheAufbau(ordner, name);
-      this.opt.log?.({ typ: 'aufbau_loeschen', name, quelle: this.quelle() });
-      return this.json(a, 200, { ok: true, name, papierkorb: ziel });
-    }
-    await this.qs.run('cypher', () => this.aufbauLaden(name, auf, a));
-  }
-  private async aufbauLaden(name: string, auf: Aufbau, a: http.ServerResponse): Promise<void> {
-    if (this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt', text: GRUND_TEXT.ki_gestoppt });
-    if (!this.kern.uhr) return this.json(a, 409, { fehler: 'keine_uhr' });
-    // 1. the live container (the live_oeffnen path, as Cypher: never over a running set of another project)
-    let live_geoeffnet = false;
-    if (this.proj.zugang.offen()?.projekt.live !== true) {
-      let r: { code: number; j: unknown };
-      try { r = await this.proj.sitzung.liveOeffnen('cypher'); } catch (e) { r = alsAntwort(e, this.bereichKontext()); }
-      if (r.code !== 200) return this.json(a, r.code, { ...(r.j as object), schritt: 'live_oeffnen' });
-      live_geoeffnet = true;
-    }
-    const offen = this.proj.zugang.offen();
-    if (!offen || offen.projekt.live !== true) return this.json(a, 409, { fehler: 'kein_liveprojekt', text: 'the live container did not open' });
-    const ausgelassen: { ziel: string; grund: string }[] = [];
-    // 2. the tempo through the tempo path (a ramp from the next bar), only when it differs
-    let bpm: number | null = null;
-    const jetztBpm = (this.kern.uhr as unknown as { bpm: number } | null)?.bpm;
-    if (typeof auf.aufbau.bpm === 'number' && Math.abs((jetztBpm ?? 0) - auf.aufbau.bpm) >= 0.005) {
-      const t = this.innenAntwort();
-      await this.tempo({ bpm: auf.aufbau.bpm }, t as unknown as http.ServerResponse);
-      if (t.code === 200) bpm = auf.aufbau.bpm; else ausgelassen.push({ ziel: 'tempo', grund: String(t.j().fehler ?? `http_${t.code}`) });
-    }
-    // 2b. Cypher's running arcs and scene restores (`szene-*`) stop before the restore: they would write their patterns over it (Cypher's tracks only)
-    for (const [n, l] of [...this.spuren]) if (l.quelle === 'cypher' && (l.bogen || n.startsWith('szene-'))) await this.spurAbbrechen(n, l, 'cypher');
-    // 3. the scene restore of slice 5 (graphs first, then one track szene-<name> from the anchor), every continuous row a 2-bar ramp
-    const { szene, kanaele } = aufbauZumLaden(auf);
-    const sz = this.innenAntwort();
-    await this.szeneLaden(name, szene, 2, offen.ordner, sz as unknown as http.ServerResponse);
-    const sj = sz.j();
-    if (sz.code !== 200) return this.json(a, sz.code, { ...sj, schritt: 'szene', live_geoeffnet, bpm, ausgelassen: [...ausgelassen, ...((sj.ausgelassen as typeof ausgelassen | undefined) ?? [])] });
-    // 4. the container faders as 2-bar ramps from the next bar through the control path (its Cypher rules: AUTO, hearing check of a track place)
-    const geschickt = await Promise.all(kanaele.map(async (k) => {
-      if (this.stand.regler[k.pfad] === k.nach) return { kanal: k.kanal, nach: k.nach, takte: 0, unveraendert: true };
-      const r = this.innenAntwort();
-      await this.regler({ pfad: k.pfad, nach: k.nach, takte: 2, ab: 'takt' }, r as unknown as http.ServerResponse);
-      const j = r.j();
-      if (r.code !== 200) { ausgelassen.push({ ziel: k.pfad, grund: String(j.fehler ?? `http_${r.code}`) }); return null; }
-      return { kanal: k.kanal, nach: k.nach, takte: 2, ab_beat: (j.felder as { ab_beat?: number } | undefined)?.ab_beat ?? null };
-    }));
-    this.opt.log?.({ typ: 'aufbau_laden', name, live_geoeffnet, bpm, kanaele: geschickt.filter((x) => x).length, ausgelassen: ausgelassen.length });
-    this.json(a, 200, { ...sj, ok: true, name, live_geoeffnet, bpm, kanaele: geschickt.filter((x) => x !== null),
-      ausgelassen: [...((sj.ausgelassen as typeof ausgelassen | undefined) ?? []), ...ausgelassen] });
-  }
-
-  // POST /spur/stopp {name} (Studio S6): wartende und laufende Fahrten der Spur enden am Ist-Wert (/k/abbruch, Wirt halte)
-  private async spurStopp(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const name = d.name;
-    if (typeof name !== 'string' || !SPUR_NAME.test(name)) return this.json(a, 400, { fehler: 'name' });
-    this.spurenAufraeumen();
-    const lauf = this.spuren.get(name);
-    if (!lauf) return this.json(a, 404, { fehler: 'keine_spur', name });
-    if (this.quelle() === 'cypher' && lauf.quelle !== 'cypher') return this.json(a, 403, { fehler: 'nur_andreas', text: 'this track is Andreas\'s' });
-    const { felder, wirt } = await this.spurAbbrechen(name, lauf, this.quelle());
-    this.json(a, 200, { ok: true, name, felder, wirt });
-  }
-
-  // POST /spur/aendern {name, spur} (1.12 S7, S8 plan "Festlegungen"): the new line of a running loop, checked like POST /spur (schleife_takte
-  // required, it may change), waits as naechste and applies from the next pass not yet sent; a later change replaces a waiting one. Only the
-  // owner changes a loop (MAJOR 3: nur_andreas / nur_cypher); for Cypher Stop Cypher, AUTO and D8 hold as at the start. Answer
-  // {ok, name, ab_beat, ab_takt, uebernaechster}: the start of the pass it applies from; uebernaechster = the next pass was already being
-  // sent, so it applies from the one after.
-  private async spurAendern(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const name = d.name, quelle = this.quelle();
-    if (typeof name !== 'string' || !SPUR_NAME.test(name)) return this.json(a, 400, { fehler: 'name' });
-    if (quelle === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
-    this.spurenAufraeumen();
-    const lauf = this.spuren.get(name);
-    if (!lauf) return this.json(a, 404, { fehler: 'keine_spur', name });
-    if (!lauf.schleife) return this.json(a, 409, { fehler: 'keine_schleife', name, text: 'only a running loop can be changed; stop and start it' });
-    if (lauf.quelle !== quelle) {
-      return lauf.quelle === 'cypher' ? this.json(a, 403, { fehler: 'nur_cypher', text: 'this loop is Cypher\'s' })
-        : this.json(a, 403, { fehler: 'nur_andreas', text: 'this loop is Andreas\'s' });
-    }
-    const r = pruefeSpur(d.spur, this.fahrbar);
-    if ('fehler' in r) return this.json(a, 400, { fehler: 'spur', text: r.fehler });
-    if (r.spur.name !== name) return this.json(a, 400, { fehler: 'spur', text: `spur.name must be ${name}` });
-    if (r.spur.schleife_takte === undefined) return this.json(a, 400, { fehler: 'spur', text: 'schleife_takte: a loop stays a loop (1..64)' });
-    const ueber = r.spur.fahrten.findIndex((f) => ueberProjekt(f.ziel) && !istStromZeile(this.proj.zugang.offen()?.projekt ?? null, f.ziel));
-    if (ueber >= 0) {
-      return this.json(a, 409, { fehler: 'ueber_projekt', ziel: r.spur.fahrten[ueber].ziel, index: ueber,
-        text: `${ueberProjektText(r.spur.fahrten[ueber].ziel)}, not by an automation track` });
-    }
-    const aliasFehler = this.spurAliasFehler(r.spur.fahrten);
-    if (aliasFehler) return this.json(a, 409, aliasFehler);
-    const s = lauf.schleife, uebernaechster = lauf.planend !== undefined;
-    const ab = uebernaechster ? lauf.planend as number : s.anker_naechster;
-    if (quelle === 'cypher') {
-      for (const f of r.spur.fahrten) {
-        const st = this.stromVonZielOffen(f.ziel);
-        if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: st, ziel: f.ziel, text: 'AUTO is off: Andreas holds this stream' });
-      }
-      const g = planeDurchlauf(r.spur, ab, 0, 0, this.proTakt());
-      const p = oeffnetKanal(this.stand.regler, [...g.teile, ...planeDurchlauf(r.spur, g.ende_beat, 0, 0, this.proTakt()).teile]);
-      if (p) return this.json(a, 409, { fehler: 'kein_hoerschein', pfad: p, text: 'this change opens a closed channel; Cypher may not (Plan Hand D8)' });
-    }
-    s.naechste = r.spur;
-    this.spurenSichern();
-    this.opt.log?.({ typ: 'spur_aendern', name, quelle, ab_beat: ab, uebernaechster });
-    this.json(a, 200, { ok: true, name, ab_beat: ab, ab_takt: Math.floor(ab / this.proTakt()) + 1, uebernaechster });
-  }
-
-  // F5: ein Timer je Spur mit Muster-Fahrten; er schreibt, sobald der Kern-Beat ab_beat − Vorlauf erreicht hat
-  private musterTimer(name: string, lauf: SpurLauf): void {
-    const zeit = setInterval(() => {
-      this.spurenAufraeumen();
-      if (this.spuren.get(name) !== lauf) { clearInterval(zeit); return; }
-      const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat;
-      if (beat === undefined) return;
-      const faellig = faelligeMuster(lauf.offen, beat);
-      if (!faellig.length) return;
-      lauf.offen = lauf.offen.filter((m) => !faellig.includes(m));
-      this.spurenSichern();
-      if (!lauf.offen.length) clearInterval(zeit);
-      for (const m of faellig) this.spurMuster(name, lauf, m).catch((e) => this.opt.log?.({ typ: 'spur_muster_fehler', name, text: e instanceof Error ? e.message : String(e) }));
-    }, 50);
-    zeit.unref();
-    lauf.timer.push(zeit);
-  }
-
-  // Studio S6: ein Muster der Spur über denselben Weg wie das Strudel-Feld (djk-muster, Musterkette, AUTO-Riegel für cypher)
-  private async spurMuster(name: string, lauf: SpurLauf, m: MusterPlan): Promise<void> {
-    if (this.spuren.get(name) !== lauf) return;
-    const beatVorher = this.kern.uhr?.beat ?? 0;
-    const fang = { code: 0, text: '', writeHead(c: number) { this.code = c; return this; }, end(t: string) { this.text = t; } };
-    await this.qs.run(lauf.quelle, () => this.strudel({ text: m.text, strom: m.strom, ...(m.bezeichnung !== undefined ? { bezeichnung: m.bezeichnung } : {}) }, fang as unknown as http.ServerResponse,
-      { abBeat: m.ab_beat, ...(Number.isInteger(m.versatz) ? { versatz: m.versatz } : {}) }));
-    this.opt.log?.({ typ: 'spur_muster', name, strom: m.strom, ziel_beat: m.ab_beat, beat_vorher: beatVorher,
-      beat_nachher: this.kern.uhr?.beat ?? 0, code: fang.code, antwort: fang.text });
-  }
-
-  // Eine Spur beenden: aus der Tabelle, Timer weg, /k/abbruch mit ihrem Plan, Wirt halte für ihre Gruppen
-  private async spurAbbrechen(name: string, lauf: SpurLauf, quelle: string): Promise<{ felder: Felder; wirt: Record<string, unknown> }> {
-    this.spuren.delete(name);
-    this.spurenSichern();
-    for (const t of lauf.timer) clearTimeout(t);
-    const felder = { id: Number(++this.id), quelle, plan: `spur:${name}`, teile: '*' };
-    this.kern.sende('/k/abbruch', felder);
-    this.gesendet++;
-    const wirt: Record<string, unknown> = {};
-    for (const gr of lauf.gruppen) wirt[gr] = await wirtRuf(this.wirtSock(gr), { befehl: 'halte', spur: name });
-    this.opt.log?.({ typ: 'spur_stopp', name });
-    return { felder, wirt };
-  }
-
-  // Task 3: Surge-Klänge. Die Python-Logik von djk-klang bleibt (kein Nachbau); der Server spawnt sie ohne Shell.
-  // fahre geht NICHT dorthin, sondern als Wirt-Befehl (Spur klang-<gruppe>), damit /abbruch und Stop Cypher es halten können.
-  private async klang(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const aktion = d.aktion;
-    const lesend = aktion === 'zeige' || aktion === 'liste';
-    if (typeof aktion !== 'string' || !['lade', 'setze', 'fahre', 'zeige', 'speichere', 'hoere', 'liste', 'param', 'params', 'ist', 'fenster'].includes(aktion)) return this.json(a, 400, { fehler: 'aktion' });
-    const gruppe = d.gruppe;
-    if (aktion !== 'liste' && (typeof gruppe !== 'string' || !KLANG_GRUPPEN.includes(gruppe))) return this.json(a, 400, { fehler: 'gruppe', text: 'gruppe must be bass or melodie' });
-    // Werte mit - vorne läsen djk-klang als Schalter (argparse): abweisen, bevor sie in argv landen
-    const text = (x: unknown): string | null => (typeof x === 'string' && x.length > 0 && x.length <= 200 && !x.startsWith('-') && !x.includes('\0') ? x : null);
-    const zahl = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null);
-    const bad = (was: string) => this.json(a, 400, { fehler: 'argument', text: `${was}: required, at most 200 characters, must not start with "-"` });
-    const argv: string[] = [];
-    if (aktion === 'lade' || aktion === 'speichere') {
-      const n = text(d.name);
-      if (n === null) return bad('name');
-      if (aktion === 'speichere' && !SPUR_NAME.test(n)) return this.json(a, 400, { fehler: 'name', text: 'name must match [a-z0-9_-]{1,32}' });
-      argv.push(n);
-    } else if (aktion === 'setze') {
-      const w = d.werte;
-      if (typeof w !== 'object' || w === null || Array.isArray(w) || Object.keys(w).length === 0) return this.json(a, 400, { fehler: 'werte', text: 'werte: {NAME: number, ...}' });
-      for (const [k, v] of Object.entries(w)) {
-        if (text(k) === null || k.includes('=')) return bad(`werte.${k}`);
-        if (zahl(v) === null) return this.json(a, 400, { fehler: 'werte', text: `werte.${k} must be a number` });
-        argv.push(`${k}=${v}`);
-      }
-      if (d.ab !== undefined || d.ab_beat !== undefined) {   // timed set: no djk-klang spawn; the host reloads its state at the beat (host `setze`, spur klang-<gruppe>)
-        const u = this.kern.uhr as unknown as { beat: number; bpm: number; mono_ns: number } | null;
-        if (!u) return this.json(a, 409, { fehler: 'keine_uhr' });
-        let abBeat: number;
-        if (d.ab_beat !== undefined) {
-          if (typeof d.ab_beat !== 'number' || !Number.isFinite(d.ab_beat)) return this.json(a, 400, { fehler: 'ab_beat', text: 'ab_beat: a core beat (number)' });
-          abBeat = d.ab_beat;
-        } else {
-          if (typeof d.ab !== 'string' || abRaster(d.ab, this.proTakt()) === undefined) return this.json(a, 400, { fehler: 'ab', text: 'ab: jetzt, schlag, takt or phrase' });
-          abBeat = this.abVon(d.ab);
-        }
-        if (this.quelle() === 'cypher') { const sperre = this.klangSperre(gruppe as string); if (sperre) return this.json(a, 409, sperre); }
-        const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'setze', werte: w, ab: beatZuMono(u, abBeat), spur: `klang-${gruppe}` });
-        if (!r.ok) return this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
-        return this.json(a, 200, { ok: true, ab_beat: abBeat, ab_takt: Math.floor(abBeat / this.proTakt()) + 1 });
-      }
-    } else if (aktion === 'zeige' || aktion === 'liste') {
-      if (d.filter !== undefined) { const f = text(d.filter); if (f === null) return bad('filter'); argv.push(f); }
-    } else if (aktion === 'hoere') {
-      if (d.note !== undefined) {
-        const n = zahl(d.note);
-        if (n === null || !Number.isInteger(n) || n < 0 || n > 127) return this.json(a, 400, { fehler: 'note', text: 'note: integer 0..127' });
-        argv.push(String(n));
-        if (d.dauer !== undefined) { const s = zahl(d.dauer); if (s === null || s <= 0 || s > 10) return this.json(a, 400, { fehler: 'dauer', text: 'dauer: seconds, 0..10' }); argv.push(String(s)); }
-      } else if (d.dauer !== undefined) return this.json(a, 400, { fehler: 'dauer', text: 'dauer needs note' });
-    } else if (aktion === 'param') {   // Baukasten S2: ein Regler eines VST3-Wirts (ParamSteuerung), normiert 0..1, direkt an den Socket wie fahre
-      const n = text(d.name), w = zahl(d.wert);
-      // die 32 Knobs von Cypher Modular, nicht Volume oder andere Plugin-Parameter (Review F3); die sieben RB-338-Namen nur, wenn der Wirt dieser Gruppe der RB-338 ist
-      const rbWirt = n !== null && RB338_PARAM_NAMEN.has(n) && (this.leseWirtMeldungen()[gruppe as string] as { art?: unknown } | null)?.art === 'vst3:rb338';
-      if (n === null || !(rbWirt || /^Knob ([1-9]|[1-5][0-9]|6[0-4])$/.test(n))) return this.json(a, 400, { fehler: 'name', text: 'name: Knob 1..64 (or an RB-338 parameter on an RB-338 host)' });
-      if (w === null || w < 0 || w > 1) return this.json(a, 400, { fehler: 'wert', text: 'wert: number 0..1 (normalized)' });
-      if (this.quelle() === 'cypher') { const sperre = this.klangSperre(gruppe as string); if (sperre) return this.json(a, 409, sperre); }
-      const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'param', name: n, wert: w });
-      return r.ok ? this.json(a, 200, { ok: true }) : this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
-    } else if (aktion === 'fenster') {   // plan 2026-11-11 task 9: show or hide the plug-in's own editor on the host's display (Andreas' button; not Cypher's)
-      if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas', text: 'the Surge window is Andreas\'s' });
-      if (typeof d.an !== 'boolean') return this.json(a, 400, { fehler: 'an', text: 'an: true or false' });
-      const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'fenster', an: d.an });
-      return r.ok ? this.json(a, 200, { ok: true, fenster: r.fenster === true, ...(typeof r.grund === 'string' ? { grund: r.grund } : {}) }) : this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
-    } else if (aktion === 'ist') {   // front panels: the display values a Surge host plays now (read-only like params: no klangSperre); {parameter: [name, ...]} 1..64 fahrbar names
-      const namen = d.parameter;
-      if (!Array.isArray(namen) || namen.length < 1 || namen.length > 64 || !namen.every((n) => typeof n === 'string')) return this.json(a, 400, { fehler: 'parameter', text: 'parameter: a list of 1..64 Surge parameter names' });
-      const unbekannt = (namen as string[]).find((n) => !this.fahrbar.has(n));
-      if (unbekannt !== undefined) return this.json(a, 400, { fehler: 'nicht_fahrbar', parameter: unbekannt, text: `${unbekannt} is not a continuous Surge parameter` });
-      const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'ist', namen });
-      return r.ok ? this.json(a, 200, { ok: true, werte: r.werte ?? {} }) : this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
-    } else if (aktion === 'params') {   // Baukasten S2: alle Regler mit Ist-Wert, dazu die Knob-Namen aus dem Graphen (lesend, ohne Riegel)
-      const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'params' });
-      if (!r.ok) return this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
-      return this.json(a, 200, { ok: true, params: r.params ?? {}, namen: this.reglerNamen(gruppe as string) });
-    } else {   // fahre
-      const p = text(d.parameter), ziel = zahl(d.ziel), sek = zahl(d.sekunden), von = d.von === undefined ? undefined : zahl(d.von);
-      if (p === null) return bad('parameter');
-      if (ziel === null || sek === null || von === null) return this.json(a, 400, { fehler: 'werte', text: 'ziel, sekunden (and von) must be numbers' });
-      if (sek < 0 || sek > 600) return this.json(a, 400, { fehler: 'sekunden', text: 'sekunden: 0..600' });
-      if (!this.fahrbar.has(p)) return this.json(a, 400, { fehler: 'nicht_fahrbar', parameter: p, text: `${p} is not a continuous parameter; use setze (reloads, audible click)` });
-      if (this.quelle() === 'cypher') { const sperre = this.klangSperre(gruppe as string); if (sperre) return this.json(a, 409, sperre); }
-      const befehl = { befehl: 'fahre', name: p, bis: ziel, dauer: sek, spur: `klang-${gruppe}`, form: 'linear', ...(von !== undefined ? { von } : {}) };
-      const r = await wirtRuf(this.wirtSock(gruppe as string), befehl);
-      return r.ok ? this.json(a, 200, { ok: true, ...(r.ersetzt ? { ersetzt: r.ersetzt } : {}) }) : this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
-    }
-    if (!lesend && this.quelle() === 'cypher') { const sperre = this.klangSperre(gruppe as string); if (sperre) return this.json(a, 409, sperre); }
-    const inst = instanz();
-    const cmd = this.opt.klangBefehl ?? REPO_PFADE.djkKlang;
-    const voll = [...(inst ? ['--instanz', inst] : []), ...(aktion === 'liste' ? [] : [gruppe as string]), aktion, ...argv];
-    const r = await new Promise<{ code: number | null; out: string; err: string; gekappt: boolean; fehler?: string }>((fertig) => {
-      let out = '', err = '', gekappt = false, unten = false;
-      const k = spawn(cmd, voll, { stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
-      k.stdout.on('data', (b: Buffer) => { if (out.length + b.length > KLANG_AUS_MAX) { gekappt = true; out += b.toString().slice(0, KLANG_AUS_MAX - out.length); } else out += b; });
-      k.stderr.on('data', (b: Buffer) => { if (err.length < KLANG_ERR_MAX) err += b.toString().slice(0, KLANG_ERR_MAX - err.length); });
-      k.on('error', (e) => { if (!unten) { unten = true; fertig({ code: null, out, err, gekappt, fehler: e.message }); } });
-      k.on('close', (c) => { if (!unten) { unten = true; fertig({ code: c, out, err, gekappt }); } });
-    });
-    if (r.fehler !== undefined) return this.json(a, 500, { fehler: 'klang_start', text: r.fehler });
-    if (r.code === 0) return this.json(a, 200, { ok: true, text: r.out, ...(r.gekappt ? { abgeschnitten: true } : {}) });
-    const zeilen = r.err.split('\n').map((z) => z.trim()).filter((z) => z !== '');
-    return this.json(a, 400, { fehler: zeilen.at(-1) ?? (r.code === null ? 'timeout' : `exit ${r.code}`), text: r.err });
-  }
-
-  // Baukasten S2: regler_namen aus baukasten-<gruppe>.json → {"Knob 1": "Cutoff", …}; ohne Datei, bei kaputtem JSON oder
-  // fremden Schlüsseln bleibt der Eintrag weg (der Wirt spielt dann ohnehin den eingebauten Graphen ohne Namen)
-  private reglerNamen(gruppe: string): Record<string, string> {
-    const namen: Record<string, string> = {};
-    try {
-      const g = JSON.parse(fs.readFileSync(path.join(this.opt.baukastenOrdner ?? baukastenOrdnerVorgabe(), `baukasten-${gruppe}.json`), 'utf8'));
-      for (const [nr, name] of Object.entries(g?.regler_namen ?? {})) {
-        if (/^([1-9]|[1-5][0-9]|6[0-4])$/.test(nr) && typeof name === 'string' && name.length > 0 && name.length <= 40) namen[`Knob ${nr}`] = name;
-      }
-    } catch { /* keine Datei oder kein JSON: keine Namen */ }
-    return namen;
-  }
-
-  // Cyphers Riegel für schreibende Klang-Aktionen: Stop Cypher, AUTO des Stroms (bass 2, melodie 3)
-  private klangSperre(gruppe: string): Record<string, unknown> | null {
-    if (this.kiGestoppt) return { fehler: 'ki_gestoppt' };
-    const strom = gruppe === 'bass' ? 2 : 3;
-    if (!leseMusterStand(this.musterOrdner(strom)).autonom) return { fehler: 'auto_aus', strom, text: 'AUTO is off for this instance: Andreas holds it' };
-    return null;
-  }
-
-  // Alle Spuren mit Quelle cypher beenden (Cyphers /abbruch und Stop Cypher); Andreas' Spuren bleiben
-  private async cypherSpurenAbbrechen(): Promise<void> {
-    this.spurenAufraeumen();
-    await Promise.all([...this.spuren].filter(([, l]) => l.quelle === 'cypher').map(([name, l]) => this.spurAbbrechen(name, l, 'cypher')));
-    // Task 3: Cyphers Klang-Fahrten (POST /klang fahre) tragen die Spur klang-<gruppe> und stehen in keiner Tabelle; ein fehlender Wirt ist kein Fehler
-    await Promise.all(KLANG_GRUPPEN.map((g) => wirtRuf(this.wirtSock(g), { befehl: 'halte', spur: `klang-${g}` }, 1000)));
-  }
-
-  // Spuren, deren Ende + 1 Beat im Kern-Beat vorbei ist, fallen aus der Tabelle (Kern-Beat statt Wanduhr: ein
-  // Tempowechsel darf eine noch laufende Spur nicht verwaisen lassen)
-  private spurenAufraeumen(): void {
-    const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat;
-    if (beat === undefined) return;
-    let weg = false;
-    for (const [name, l] of this.spuren) if (!l.schleife && l.ende + 1 < beat) { for (const t of l.timer) clearTimeout(t); this.spuren.delete(name); weg = true; }
-    if (weg) this.spurenSichern();
-  }
-
-  private spurListe(): Record<string, unknown>[] {
-    this.spurenAufraeumen();
-    return [...this.spuren].map(([name, l]) => ({ name, quelle: l.quelle, anker_beat: l.anker, ende_beat: l.ende, fahrten: l.fahrten,
-      abgelehnt: this.spurAbgelehnt(l), ...(l.schleife ? this.schleifenInfo(l.schleife) : {}), ...(l.bogen ? { bogen: this.bogenInfo(l) } : {}) }));
-  }
-
-  // Task 7.5: where the arc stands and what changes next, from the core beat (the page has no arc logic). takt_im_bogen 0 = not started yet.
-  private bogenInfo(l: SpurLauf): Record<string, unknown> {
-    const b = l.bogen as NonNullable<SpurLauf['bogen']>;
-    const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? null;
-    const im = beat === null ? 0 : Math.max(0, Math.min(b.takte, Math.floor((beat - l.anker) / this.proTakt()) + 1));
-    const naechst = b.plan.filter((z) => z.takt > im).reduce<number | null>((m, z) => (m === null || z.takt < m ? z.takt : m), null);
-    const naechste = naechst === null ? null : { in_takten: naechst - im, text: b.plan.filter((z) => z.takt === naechst).map((z) => z.text).join('; ') };
-    return { name: b.name, takte: b.takte, takt_im_bogen: im, naechste };
-  }
-
-  // Task 7.5: POST /bogen. The flat body is the arc (name, takte, schichten, bruch?, fahrten?) plus ab, anker_takt, probe. It compiles to one spur body and
-  // goes through spurStart, so every spur rule holds. Answer: the spur answer plus kompiliert (the spur body) and plan.
-  private async bogenStart(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    if (d.schleife !== undefined || d.schleife_takte !== undefined) return this.json(a, 400, { fehler: 'bogen_schleife', text: GRUND_TEXT.bogen_schleife });
-    const { ab, anker_takt, probe, ...bogen } = d;
-    const k = kompiliereBogen(bogen, this.fahrbar);
-    if ('fehler' in k) return this.json(a, 400, { fehler: 'bogen', text: k.text });
-    const fang = this.innenAntwort();
-    const rein: Record<string, unknown> = { spur: k.spur };
-    if (ab !== undefined) rein.ab = ab;
-    if (anker_takt !== undefined) rein.anker_takt = anker_takt;
-    if (probe !== undefined) rein.probe = probe;
-    await this.spurStart(rein, fang as unknown as http.ServerResponse, { bogen: { name: k.spur.name, takte: (bogen as { takte: number }).takte, plan: k.plan } });
-    const j = fang.j();
-    this.json(a, fang.code, fang.code === 200 ? { ...j, kompiliert: k.spur, plan: k.plan } : j);
-  }
-
-  // Teile der Spur, deren letzte Kern-Quittung ein Fehlstatus ist (GET /spur und Antwort von POST /spur)
-  private spurAbgelehnt(l: SpurLauf): { teil: number; pfad: string; status: number; grund: string }[] {
-    return l.teile.flatMap((t) => {
-      const y = this.quittungen.get(t.id)?.at(-1);
-      return y && FEHL_STATUS.has(Number(y.status)) ? [{ teil: t.teil, pfad: t.pfad, status: Number(y.status), grund: String(y.grund ?? '') }] : [];
-    });
-  }
-
-  // 1.12 S7 (M13): GET /spur fields of a loop. anker_beat/ende_beat name the RUNNING pass (the last sent one whose start the core beat
-  // has reached; before that the first one), durchlauf its number k, schleife_takte its length, naechste whether a change waits.
-  private schleifenInfo(s: SchleifenStand): Record<string, unknown> {
-    const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? -Infinity;
-    const d = s.durchlaeufe.filter((x) => x.anfang <= beat).at(-1) ?? s.durchlaeufe[0];
-    return { schleife_takte: (d.ende - d.anfang) / (d.proTakt ?? 4), durchlauf: d.k, anker_beat: d.anfang, ende_beat: d.ende, naechste: s.naechste !== null };
-  }
-
-  // 1.12 S7: one watcher per loop track (like musterTimer, 50 ms, core beat instead of wall clock). MAJOR 1: it is serial; while a pass is
-  // being planned (lauf.planend, set before the first await) further ticks do nothing, so two ticks during one await never plan a pass twice.
-  private schleifenWaechter(name: string, lauf: SpurLauf): void {
-    const zeit = setInterval(() => {
-      if (this.spuren.get(name) !== lauf) { clearInterval(zeit); return; }
-      if (lauf.planend !== undefined) return;
-      void this.schleifenTakt(name, lauf);
-    }, 50);
-    zeit.unref();
-    lauf.timer.push(zeit);
-  }
-
-  // One tick. MAJOR 2: the pass to send is the one starting at anker_naechster; once the core beat is within VORLAUF_SCHLEIFE_BEATS of it,
-  // it goes out. If its start is not in the future any more (the clock was away, the server was down), the missed passes are skipped:
-  // with k = floor((beat − anker_naechster) / 4n) + 1 passes dropped, the next start lies after the beat. A pass whose start lies in the
-  // past is never sent.
-  private async schleifenTakt(name: string, lauf: SpurLauf): Promise<void> {
-    const s = lauf.schleife as SchleifenStand, u = this.kern.uhr as unknown as { beat: number; bpm: number; mono_ns: number } | null;
-    if (!u || u.beat < s.anker_naechster - VORLAUF_SCHLEIFE_BEATS) return;
-    if (s.anker_naechster <= u.beat) {
-      this.schleifeUeberspringen(name, s, Math.floor((u.beat - s.anker_naechster) / (this.proTakt() * s.n)) + 1, u.beat);
-      if (u.beat < s.anker_naechster - VORLAUF_SCHLEIFE_BEATS) { this.spurenSichern(); return; }
-    }
-    lauf.planend = s.anker_naechster + this.proTakt() * s.n;   // sendeDurchlauf sets the exact end before its first await
-    try { await this.sendeDurchlauf(name, lauf, u); } finally { lauf.planend = undefined; }
-  }
-
-  private schleifeUeberspringen(name: string, s: SchleifenStand, weg: number, beat: number): void {
-    this.opt.log?.({ typ: 'spur_schleife_uebersprungen', name, durchlauf: s.durchlauf, durchlaeufe: weg, ab_beat: s.anker_naechster, beat });
-    s.anker_naechster += weg * this.proTakt() * s.n;
-    s.durchlauf += weg;
-  }
-
-  // Send the pass at anker_naechster: wirt first (fahre with a start in the future), then the core parts (/k/teil, plan spur:<name>, part
-  // numbers continuing). After every await the loop must still be this one (MAJOR 1: a STOP during the await lets no part follow); a wirt
-  // error ends the loop with a log entry (there is no HTTP answer inside the watcher). spuren.json is written once per pass (MINOR 6).
-  private async sendeDurchlauf(name: string, lauf: SpurLauf, u: { beat: number; bpm: number; mono_ns: number }): Promise<void> {
-    const s = lauf.schleife as SchleifenStand;
-    const spur: Spur = s.naechste ?? { name, fahrten: lauf.fahrten, schleife_takte: s.n };
-    const g = planeDurchlauf(spur, s.anker_naechster, 0, s.teilNr, this.proTakt());
-    lauf.planend = g.ende_beat;
-    if (lauf.quelle === 'cypher') {   // MAJOR 3: Stop Cypher, AUTO and D8 hold for every pass of Cypher's loop, not only at the start
-      const sperre = this.schleifenSperre(spur, g.teile);
-      if (sperre) return this.schleifeBeenden(name, lauf, sperre);
-    }
-    for (const w of g.wirt) {
-      const uhr = (this.kern.uhr as unknown as typeof u | null) ?? u;
-      // The fahre and, if the run ended meanwhile, its compensating halte form one in-flight unit per track name: a new run of that name
-      // waits for it (wirtFlugAbwarten), so the wirt sees old fahre, halte, new fahre in this order. A halte after the new fahre would drop the
-      // new ramps; no halte would leave the old ramp where it is older than the new one (host_control.py: a fahre replaces only t0 >= its ab).
-      const antwort = await this.wirtFlug(name, async () => {
-        const r = await wirtRuf(this.wirtSock(w.gruppe), { befehl: 'fahre', name: w.name, bis: w.bis, dauer: w.dauer_beats * 60 / uhr.bpm,
-          ab: beatZuMono(uhr, w.ab_beat), spur: name, form: w.form, ...(w.von !== undefined ? { von: w.von } : {}) });
-        if (this.spuren.get(name) !== lauf && r.ok) await wirtRuf(this.wirtSock(w.gruppe), { befehl: 'halte', spur: name });   // stopped while waiting: the STOP's halte may have come first
-        return r;
-      });
-      if (this.spuren.get(name) !== lauf) return;
-      if (!antwort.ok) return this.schleifeBeenden(name, lauf, { grund: 'wirt', gruppe: w.gruppe, text: String(antwort.fehler ?? '') });
-      lauf.gruppen.add(w.gruppe);
-      this.opt.log?.({ typ: 'spur_wirt', name, gruppe: w.gruppe, parameter: w.name, ab_beat: w.ab_beat, durchlauf: s.durchlauf });
-      if (Number(antwort.ersetzt) > 0) this.opt.log?.({ typ: 'spur_wirt_ersetzt', name, gruppe: w.gruppe, parameter: w.name, ersetzt: Number(antwort.ersetzt) });
-    }
-    const jetzt = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? u.beat;
-    if (g.anfang_beat <= jetzt) {   // the wirt took so long that the start has passed: the core parts of this pass are not sent (MAJOR 2)
-      this.opt.log?.({ typ: 'spur_schleife_uebersprungen', name, durchlauf: s.durchlauf, durchlaeufe: 1, ab_beat: g.anfang_beat, beat: jetzt });
-      this.schleifeUebernimm(lauf, spur);
-      s.durchlauf++;
-      s.anker_naechster = g.ende_beat;   // the length of this pass, which may already be the new n
-      this.spurenSichern();
-      return;
-    }
-    for (const t of g.teile) {
-      const kernPfad = this.kernPfadVon(t.pfad);
-      if (kernPfad === null) { this.opt.log?.({ typ: 'spur_ziel_aufgeloest_nicht', name, pfad: t.pfad }); continue; }
-      const felder = { id: Number(++this.id), quelle: lauf.quelle, plan: `spur:${name}`, teil: t.nr, pfad: kernPfad, ab_beat: t.ab_beat,
-        dauer_beats: t.dauer_beats, nach: t.nach, form: t.form, politik: t.politik, gruppe: '', hoerschein: '' };
-      this.kern.sende('/k/teil', felder);
-      this.gesendet++;
-      lauf.ids.push(felder.id);
-      lauf.teile.push({ id: felder.id, teil: t.nr, pfad: t.pfad });
-    }
-    this.schleifeUebernimm(lauf, spur);
-    s.durchlaeufe = [...s.durchlaeufe, { k: s.durchlauf, anfang: g.anfang_beat, ende: g.ende_beat, teile: g.teile.length, ...(this.proTakt() !== 4 ? { proTakt: this.proTakt() } : {}) }].slice(-2);
-    const behalten = s.durchlaeufe.reduce((n, d) => n + d.teile, 0);   // MINOR 6: ids and teile of the last two passes only
-    lauf.ids = behalten ? lauf.ids.slice(-behalten) : [];
-    lauf.teile = behalten ? lauf.teile.slice(-behalten) : [];
-    this.opt.log?.({ typ: 'spur_durchlauf', name, durchlauf: s.durchlauf, anfang_beat: g.anfang_beat, teile: g.teile.length, wirt: g.wirt.length });
-    s.durchlauf++;
-    s.teilNr += g.teile.length;
-    s.anker_naechster = g.ende_beat;
-    lauf.ende = g.ende_beat;
-    this.spurenSichern();
-  }
-
-  // The line a pass used is now the loop's; a change that came in during the awaits stays waiting for the next pass
-  private schleifeUebernimm(lauf: SpurLauf, spur: Spur): void {
-    const s = lauf.schleife as SchleifenStand;
-    lauf.fahrten = spur.fahrten;
-    s.n = spur.schleife_takte as number;
-    if (s.naechste === spur) s.naechste = null;
-  }
-
-  // Why Cypher's loop may not play its next pass (null: it may): Stop Cypher, AUTO off on a stream it moves (F4), a part that opens a
-  // closed channel against the current values (Plan Hand D8)
-  private schleifenSperre(spur: Spur, teile: { pfad: string; nach: number }[]): Record<string, unknown> | null {
-    if (this.kiGestoppt) return { grund: 'ki_gestoppt' };
-    for (const f of spur.fahrten) {
-      const st = this.stromVonZielOffen(f.ziel);
-      if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return { grund: 'auto_aus', strom: st, ziel: f.ziel };
-    }
-    const p = oeffnetKanal(this.stand.regler, teile as Parameters<typeof oeffnetKanal>[1]);
-    return p ? { grund: 'kein_hoerschein', pfad: p } : null;
-  }
-
-  // MAJOR 3: a hand on a target of Cypher's loop (the core reports holder mensch) ends that loop; Andreas' own loops keep running
-  private schleifenHandgriff(pfad: string): void {
-    for (const [name, l] of this.spuren) {
-      if (!l.schleife || l.quelle !== 'cypher') continue;
-      const ziele = [...l.fahrten, ...(l.schleife.naechste?.fahrten ?? [])].map((f) => f.ziel);
-      if (ziele.includes(pfad)) void this.schleifeBeenden(name, l, { grund: 'hand', pfad });
-    }
-  }
-
-  private async schleifeBeenden(name: string, lauf: SpurLauf, grund: Record<string, unknown>): Promise<void> {
-    if (this.spuren.get(name) !== lauf) return;
-    this.opt.log?.({ typ: 'spur_schleife_ende', name, quelle: lauf.quelle, ...grund });
-    await this.spurAbbrechen(name, lauf, lauf.quelle);
-  }
-
-  // Review Hand M7: Cyphers Befehle tragen plan 'cypher', damit /k/abbruch sie (auch wartende Deck-Teile) trifft
-  private planVon(): string { return this.quelle() === 'cypher' ? 'cypher' : ''; }
-
-  // POST /deck/start {deck, ab?='takt', quell_beat?} (Plan Hand T5): synchron zum Master auf den Takt, ab der Takt-Eins der
-  // Fassung (oder quell_beat). Politik 0: zu spät heißt verworfen, nicht verschoben. Für cypher auf offenem Deck gesperrt.
-  private async deckStartStopp(start: boolean, d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
-    const ab = d.ab ?? (start ? 'takt' : 'jetzt');
-    if (typeof ab !== 'string' || !(ab in AB)) return this.json(a, 400, { fehler: 'ab' });
-    const st = this.deckStand(d.deck);
-    if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
-    if (start && this.quelle() === 'cypher' && kanalOffen(this.stand.regler, pultContainerPfad[d.deck - 1])) {
-      return this.json(a, 409, { fehler: 'ziel_ungehoert', text: 'deck is open; starting it plays unheard material' });
-    }
-    const q = d.quell_beat === undefined ? st.eins : d.quell_beat;
-    if (typeof q !== 'number' || !Number.isFinite(q)) return this.json(a, 400, { fehler: 'quell_beat' });
-    const basis = { id: Number(++this.id), quelle: this.quelle(), plan: this.planVon(), gruppe: '', hoerschein: '', deck: d.deck, ab_beat: this.abVon(ab) };
-    // ab 'takt' on a 4-beat bar: politik 3 (SYNC), the core aligns the bar phase to the playing deck (it knows the exact positions); else 0
-    const takt = start && ab === 'takt' && this.proTakt() === 4;
-    const felder = start ? { ...basis, quell_beat: q, politik: takt ? 3 : 0 } : { ...basis, politik: 1 };
-    this.kern.sende(start ? '/k/deck/start' : '/k/deck/stopp', felder);
-    this.gesendet++;
-    // the core may shift a bar start by less than 4 beats; the +1 window of startSteht takes the rest
-    if (start) this.startGeplant.set(Number(d.deck), felder.ab_beat + (takt ? 3 : 0)); else this.startGeplant.delete(Number(d.deck));
-    this.json(a, 200, { ok: true, felder, quittung: await this.warteQuittung(felder.id, felder.ab_beat) });
-  }
-
-  // wirt-<gruppe>.json je Klang-Gruppe, null ohne (lesbare) Datei; geteilt von GET /klang und /lage.studio.klang
-  private leseWirtMeldungen(): Record<string, unknown> {
-    const aus: Record<string, unknown> = {};
-    for (const g of KLANG_GRUPPEN) {
-      try { aus[g] = JSON.parse(fs.readFileSync(path.join(this.wirtBasis(), `wirt-${g}.json`), 'utf8')); } catch { aus[g] = null; }
-    }
-    return aus;
-  }
-
-  // Task 4: Studio-Zustand für /lage: AUTO und Muster je Strom (Kurzform), geladener Surge-Klang je Gruppe (Name aus wirt-<g>.json)
-  private studioLage(): { stroeme: unknown[]; klang: Record<string, string | null> } {
-    // S18: streams 1..3 always; a Baukasten stream (5, 6, 7, 9, 10) only while its erzeuger heartbeat is fresh
-    const stroeme = ALLE_STROEME.filter((s) => !istBkStrom(s) || this.erzeugerLebt(s)).map((strom) => {
-      const m = leseMusterStand(this.musterOrdner(strom));
-      return { strom, autonom: m.autonom, von: m.von, bezeichnung: m.bezeichnung, text_kurz: m.text.slice(0, 200) };
-    });
-    const w = this.leseWirtMeldungen(), klang: Record<string, string | null> = {};
-    for (const g of KLANG_GRUPPEN) klang[g] = (w[g] as { klang?: unknown } | null)?.klang as string | null ?? null;
-    return { stroeme, klang };
-  }
-
-  // GET /lage (Plan Hand D5): verdichteter Stand für einen Zug
-  // 1.15 A7b (D11): the last spectrum frame, or {leer:true} while the selector is 0 (known from the /e/regler echo: no source has the name '') or no frame came yet.
-  private spektrum(): Record<string, unknown> {
-    const l = this.spektrumLetzt;
-    const sel = this.stand.regler['spektrum/kanal'];
-    if (!l) return { leer: true };
-    if (sel !== undefined && l.kanal !== SPEKTRUM_QUELLEN[sel]) return { leer: true };   // a late frame of the previous source
-    return { leer: false, kanal: l.kanal, rahmen: l.rahmen, pegel: l.pegel, alter_ms: Date.now() - l.zeit };
-  }
-
-  // The four places of the open live project (the only truth for what sits in each container); null without one (no project, or a production project)
-  private plaetzeLage(): readonly unknown[] | null {
-    const p = this.proj.zugang.offen()?.projekt;
-    return p?.live === true && p.plaetze ? structuredClone(p.plaetze) : null;
-  }
-  // POST /plaetze {platz, typ, gruppe_id?} (container core M6): one platz_setzen command through the project machinery (rev, undo, kanal_offen, playback swap)
-  private async plaetzeSetzen(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const platz = d.platz, typ = d.typ;
-    if (platz !== 1 && platz !== 2 && platz !== 3 && platz !== 4) return this.json(a, 400, { fehler: 'platz_ungueltig', text: 'platz: integer 1..4 expected' });
-    if (typeof typ !== 'string' || !PLATZ_TYPEN.includes(typ as PlatzTyp)) return this.json(a, 400, { fehler: 'platz_ungueltig', text: `typ: one of ${PLATZ_TYPEN.join(' ')} expected` });
-    if (d.gruppe_id !== undefined && typeof d.gruppe_id !== 'string') return this.json(a, 400, { fehler: 'platz_ungueltig', text: 'gruppe_id: text expected' });
-    const o = this.proj.zugang.offen();
-    if (!o || o.projekt.live !== true || !o.projekt.plaetze) return this.json(a, 409, { fehler: 'kein_liveprojekt', text: 'places belong to the live container' });
-    const aktuell = o.projekt.plaetze[platz - 1];
-    if (aktuell.typ === typ && d.gruppe_id === undefined) return this.json(a, 200, { ok: true, plaetze: this.plaetzeLage(), rev: o.projekt.rev });
-    // a place that holds a SEQ deck or a loop deck is parked, not emptied: no still rule (the page mutes the group first)
-    const parken = aktuell.typ === 'seq' || aktuell.typ === 'loops';
-    if (!parken) {
-      const s = platzStill(platz, this.stand.regler);
-      if (!s.still) return this.json(a, 409, { fehler: 'platz_offen', grund: s.offen[0].grund, kanal: s.offen[0].kanal, platz, text: s.text });
-    }
-    const befehl = { befehl: 'platz_setzen', platz, typ, ...(d.gruppe_id !== undefined ? { gruppe_id: d.gruppe_id } : {}) };
-    let r: { code: number; j: Record<string, unknown> };
-    try { r = await this.proj.sitzung.aendern({ rev: o.projekt.rev, label: `Place ${platz}: ${typ}`, befehle: [befehl] }, this.quelle()) as typeof r; }
-    catch (e) { r = alsAntwort(e, this.bereichKontext()) as typeof r; }
-    if (r.code !== 200) {
-      const fehler = r.j.fehler === 'typ_doppelt' ? 'typ_einmalig' : r.j.fehler === 'platz_belegt' ? 'loopdeck_voll' : r.j.fehler;
-      return this.json(a, r.code, { ...r.j, fehler });
-    }
-    this.json(a, 200, { ok: true, plaetze: this.plaetzeLage(), rev: r.j.rev, ...(parken ? { parken: true } : {}) });
-  }
+  private wirtFlugAbwarten(...a: Parameters<typeof WI.wirtFlugAbwarten>) { return WI.wirtFlugAbwarten.call(this, ...a); }
+  private wirtBasis(...a: Parameters<typeof WI.wirtBasis>) { return WI.wirtBasis.call(this, ...a); }
+  private wirtSock(...a: Parameters<typeof WI.wirtSock>) { return WI.wirtSock.call(this, ...a); }
+  private spurenSichern(...a: Parameters<typeof SL.spurenSichern>) { return SL.spurenSichern.call(this, ...a); }
+  private spurenLaden(...a: Parameters<typeof SL.spurenLaden>) { return SL.spurenLaden.call(this, ...a); }
+  private spurStart(...a: Parameters<typeof SL.spurStart>) { return SL.spurStart.call(this, ...a); }
+  private innenAntwort(...a: Parameters<typeof SL.innenAntwort>) { return SL.innenAntwort.call(this, ...a); }
+  private aktionPasst(...a: Parameters<typeof SL.aktionPasst>) { return SL.aktionPasst.call(this, ...a); }
+  private szeneSammeln(...a: Parameters<typeof SZ.szeneSammeln>) { return SZ.szeneSammeln.call(this, ...a); }
+  private szene(...a: Parameters<typeof SZ.szene>) { return SZ.szene.call(this, ...a); }
+  private szeneFxLaden(...a: Parameters<typeof SZ.szeneFxLaden>) { return SZ.szeneFxLaden.call(this, ...a); }
+  private szeneAnkerTakt(...a: Parameters<typeof SZ.szeneAnkerTakt>) { return SZ.szeneAnkerTakt.call(this, ...a); }
+  private szeneLaden(...a: Parameters<typeof SZ.szeneLaden>) { return SZ.szeneLaden.call(this, ...a); }
+  private aufbau(...a: Parameters<typeof SZ.aufbau>) { return SZ.aufbau.call(this, ...a); }
+  private aufbauLaden(...a: Parameters<typeof SZ.aufbauLaden>) { return SZ.aufbauLaden.call(this, ...a); }
+  private spurStopp(...a: Parameters<typeof SL.spurStopp>) { return SL.spurStopp.call(this, ...a); }
+  private spurAendern(...a: Parameters<typeof SL.spurAendern>) { return SL.spurAendern.call(this, ...a); }
+  private musterTimer(...a: Parameters<typeof SL.musterTimer>) { return SL.musterTimer.call(this, ...a); }
+  private spurMuster(...a: Parameters<typeof SL.spurMuster>) { return SL.spurMuster.call(this, ...a); }
+  private spurAbbrechen(...a: Parameters<typeof SL.spurAbbrechen>) { return SL.spurAbbrechen.call(this, ...a); }
+  private klang(...a: Parameters<typeof KL.klang>) { return KL.klang.call(this, ...a); }
+  private reglerNamen(...a: Parameters<typeof KL.reglerNamen>) { return KL.reglerNamen.call(this, ...a); }
+  private klangSperre(...a: Parameters<typeof KL.klangSperre>) { return KL.klangSperre.call(this, ...a); }
+  private cypherSpurenAbbrechen(...a: Parameters<typeof SL.cypherSpurenAbbrechen>) { return SL.cypherSpurenAbbrechen.call(this, ...a); }
+  private spurenAufraeumen(...a: Parameters<typeof SL.spurenAufraeumen>) { return SL.spurenAufraeumen.call(this, ...a); }
+  private spurListe(...a: Parameters<typeof SL.spurListe>) { return SL.spurListe.call(this, ...a); }
+  private bogenInfo(...a: Parameters<typeof SL.bogenInfo>) { return SL.bogenInfo.call(this, ...a); }
+  private bogenStart(...a: Parameters<typeof SL.bogenStart>) { return SL.bogenStart.call(this, ...a); }
+  private spurAbgelehnt(...a: Parameters<typeof SL.spurAbgelehnt>) { return SL.spurAbgelehnt.call(this, ...a); }
+  private schleifenInfo(...a: Parameters<typeof SC.schleifenInfo>) { return SC.schleifenInfo.call(this, ...a); }
+  private schleifenWaechter(...a: Parameters<typeof SC.schleifenWaechter>) { return SC.schleifenWaechter.call(this, ...a); }
+  private schleifenTakt(...a: Parameters<typeof SC.schleifenTakt>) { return SC.schleifenTakt.call(this, ...a); }
+  private schleifeUeberspringen(...a: Parameters<typeof SC.schleifeUeberspringen>) { return SC.schleifeUeberspringen.call(this, ...a); }
+  private sendeDurchlauf(...a: Parameters<typeof SC.sendeDurchlauf>) { return SC.sendeDurchlauf.call(this, ...a); }
+  private schleifeUebernimm(...a: Parameters<typeof SC.schleifeUebernimm>) { return SC.schleifeUebernimm.call(this, ...a); }
+  private schleifenSperre(...a: Parameters<typeof SC.schleifenSperre>) { return SC.schleifenSperre.call(this, ...a); }
+  private schleifenHandgriff(...a: Parameters<typeof SC.schleifenHandgriff>) { return SC.schleifenHandgriff.call(this, ...a); }
+  private schleifeBeenden(...a: Parameters<typeof SC.schleifeBeenden>) { return SC.schleifeBeenden.call(this, ...a); }
+  private planVon(...a: Parameters<typeof WI.planVon>) { return WI.planVon.call(this, ...a); }
+  private deckStartStopp(...a: Parameters<typeof DK.deckStartStopp>) { return DK.deckStartStopp.call(this, ...a); }
+  private leseWirtMeldungen(...a: Parameters<typeof WI.leseWirtMeldungen>) { return WI.leseWirtMeldungen.call(this, ...a); }
+  private studioLage(...a: Parameters<typeof WI.studioLage>) { return WI.studioLage.call(this, ...a); }
+  private spektrum(...a: Parameters<typeof WI.spektrum>) { return WI.spektrum.call(this, ...a); }
+  private plaetzeLage(...a: Parameters<typeof WI.plaetzeLage>) { return WI.plaetzeLage.call(this, ...a); }
+  private plaetzeSetzen(...a: Parameters<typeof WI.plaetzeSetzen>) { return WI.plaetzeSetzen.call(this, ...a); }
 
   private lage(): Record<string, unknown> {
     const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
@@ -3286,296 +666,17 @@ export class Oberflaeche {
   private readonly router = new Router();   // Plan d1-s1 Task 9: Bereiche melden hier ihre Routen (oberflaeche zuerst, dann proj)
   meldeBereich(b: Bereich): void { this.router.melde(b); }
   routen(): ReturnType<Router['liste']> { return this.router.liste(); }
-  // Spec D1 2.10: dünne Fassade für Bereiche; sende nutzt denselben id-Zähler und zählt gesendet wie die Bestandsrouten
-  bereichKontext(): BereichKontext {
-    return {
-      // id kommt nur aus dem gemeinsamen Zähler (eine id in felder wirft); quelle ist die der Anfrage, wenn felder keine tragen
-      sende: (adresse, felder) => {
-        if ('id' in felder) throw new Error('sende: id vergibt der Server, felder darf keine tragen');
-        const id = Number(++this.id);
-        this.kern.sende(adresse, { id, quelle: this.quelle(), ...felder } as Felder); this.gesendet++; return id;
-      },
-      warteQuittung: (id, abBeat, bisEnde, maxMs, ersteGenuegt) => this.warteQuittung(id, abBeat, bisEnde, maxMs, ersteGenuegt),
-      quelle: () => (this.quelle() === 'cypher' ? 'cypher' : 'andreas'),
-      kiGestoppt: () => this.kiGestoppt,
-      verteile: (ereignis) => this.verteile(ereignis),
-      log: (zeile) => { this.opt.log?.(zeile); },
-      host: {   // host learn: the wirt sockets of the instrument hosts and the control rows
-        art: (gruppe) => { const a = (this.leseWirtMeldungen()[gruppe] as { art?: unknown } | null)?.art; return typeof a === 'string' ? a : null; },
-        ruf: (gruppe, befehl) => wirtRuf(this.wirtSock(gruppe), befehl),
-        setzeRegler: async (pfad, nach) => {   // the path of POST /regler, in the running request (source andreas)
-          let code = 0;
-          const stub = { writeHead: (c: number) => { code = c; }, end: () => undefined } as unknown as http.ServerResponse;
-          await this.regler({ pfad, nach, ab: 'jetzt' }, stub);
-          return code === 200;
-        },
-      },
-      projekt: () => this.proj.zugang.offen()?.projekt ?? null,
-      baukasten: {   // S17: the proj Bereich restores and captures graphs through the same checks as POST /graph
-        geladen: () => ({ ...this.stand.graphen_geladen }),
-        setzeGraph: (kanal, name, quelle, opt) => this.graphSetzen({ kanal, name, ...(opt?.vorgaben === false ? { vorgaben: false } : {}) }, quelle),
-        autoAus: (kanal) => { const st = stromVonKanal(kanal); return INSTRUMENT_KANAELE.includes(kanal) && typeof st === 'number' && !leseMusterStand(this.musterOrdner(st)).autonom; },   // S17+S18: stream from the shared table (pad/N is stream 8+N)
-        graphHash: (name) => graphHash(name),
-        kernDa: () => this.kern.zustand === 'verbunden',   // S17: without a kern the restore sends nothing and answers kein_kern at once
-      },
-    };
-  }
+  bereichKontext(...a: Parameters<typeof KX.bereichKontext>) { return KX.bereichKontext.call(this, ...a); }
   private quelle(): string { return this.qs.getStore() ?? 'andreas'; }
   private readonly wer = new AsyncLocalStorage<{ id: string; name: string; stufe: Stufe } | null>();   // the key of the request (agents only)
   private readonly schluessel: HandSchluessel;
   private streng(): boolean { return this.opt.hand?.streng ?? instanz() === ''; }
-  // Host guard (DNS rebinding), then the key: a valid bearer token makes the request an agent request whatever x-djk-quelle says.
-  private anfrage(q: http.IncomingMessage, a: http.ServerResponse): Promise<void> {
-    const host = String(q.headers.host ?? '');
-    if (host !== `127.0.0.1:${this.opt.port}` && host !== `localhost:${this.opt.port}`) {
-      this.json(a, 421, { fehler: 'falscher_host', text: 'open the page as http://127.0.0.1:<port>/' });
-      return Promise.resolve();
-    }
-    const auth = q.headers.authorization;
-    if (auth !== undefined) {
-      const w = this.schluessel.pruefe(auth);
-      if (w === null) {
-        this.json(a, 401, { fehler: 'schluessel_ungueltig',
-          text: 'the agent key is not valid (revoked or wrong); the hand re-reads ~/.config/cypherdj/hand.token' });
-        return Promise.resolve();
-      }
-      return this.wer.run(w, () => this.qs.run('cypher', () => this.anfrageInnen(q, a)));
-    }
-    if (quelleAusKopf(q) === 'cypher') {
-      if (this.streng()) {
-        this.json(a, 401, { fehler: 'schluessel_fehlt',
-          text: 'agents need the key from ~/.config/cypherdj/hand.token (djk-hand reads it by itself; restart the hand)' });
-        return Promise.resolve();
-      }
-      const w = { id: 'ohne_schluessel', name: 'header only (test instance)', stufe: 'zerstoerend' as const };
-      return this.wer.run(w, () => this.qs.run('cypher', () => this.anfrageInnen(q, a)));
-    }
-    return this.qs.run('andreas', () => this.anfrageInnen(q, a));
-  }
+  private anfrage(...a: Parameters<typeof AN.anfrage>) { return AN.anfrage.call(this, ...a); }
   private readonly handLog: HandLog;
   private readonly gesehenAufrufe = new Set<string>();
-  // true for the first request of one tool call (id + x-djk-aufruf); without an aufruf every non-GET counts as a call, GET polling does not
-  private neuerAufruf(id: string, aufruf: string | null, methode: string): boolean {
-    if (aufruf === null) return methode !== 'GET';
-    const k = `${id}\u0000${aufruf}`;
-    if (this.gesehenAufrufe.has(k)) return false;
-    this.gesehenAufrufe.add(k);
-    if (this.gesehenAufrufe.size > 2000) this.gesehenAufrufe.delete(this.gesehenAufrufe.values().next().value as string);
-    return true;
-  }
-  private async anfrageInnen(q: http.IncomingMessage, a: http.ServerResponse, herkunft?: string): Promise<void> {
-    const url = new URL(q.url ?? '/', 'http://127.0.0.1');
-    if (this.quelle() === 'cypher') {
-      const anfrage: HandAnfrage = { methode: q.method ?? '', pfad: url.pathname, quelle: 'cypher', wer: this.wer.getStore() ?? null,
-        werkzeug: kopfWert(q.headers['x-djk-werkzeug']), aktion: kopfWert(q.headers['x-djk-aktion']), aufruf: kopfWert(q.headers['x-djk-aufruf'], true) };
-      const u = pruefeHand(this.handRegeln, anfrage);
-      const w = anfrage.wer;
-      if (w) {   // agent log: a refusal at once, an allowed call when its response is finished (first request of an aufruf only)
-        const lk = handLogKopf(q, anfrage);
-        const eintrag = { t: Date.now(), id: w.id, name: w.name, werkzeug: lk.werkzeug, aktion: lk.aktion, methode: anfrage.methode, pfad: anfrage.pfad };
-        if (!u.ok) this.handLog.schreibe({ ...eintrag, code: u.code, ok: false, fehler: u.fehler });
-        else if (this.neuerAufruf(w.id, lk.aufruf, anfrage.methode)) {
-          a.once('finish', () => this.handLog.schreibe({ ...eintrag, code: a.statusCode, ok: a.statusCode < 400 }));
-        }
-      }
-      if (!u.ok) {
-        this.opt.log?.({ typ: 'hand_abgewiesen', methode: anfrage.methode, pfad: anfrage.pfad, fehler: u.fehler });
-        return this.json(a, u.code, { fehler: u.fehler, text: u.text, ...u.mehr });
-      }
-    }
-    const r = this.router.finde(q.method ?? '', url.pathname);
-    if (r) {
-      if (r.schutz === 'fremdePost' && q.method === 'POST' && postAbgewiesen(q, a, this.opt.port, herkunft)) return;
-      return await r.handler(q, a, url);
-    }
-    if (q.method === 'GET') return this.datei(url.pathname, a);
-    this.json(a, 405, { fehler: 'methode' });
-  }
-
-  // Plan d1-s1 Task 9: die frühere if-Kette (bfdd3983 server.ts:1445-1648) als Routentabelle, Reihenfolge unverändert (erster Treffer
-  // gewinnt). schutz 'fremdePost' prüft der Router vor dem Handler, nur bei POST (415 vor 403, wie zuvor an jeder Stelle einzeln).
-  // Riegel (ki_gestoppt, nur_cypher, nur_andreas, AUTO) bleiben an ihrer Stelle im Handler: ihre Rangfolge hängt am Ort (Karte 01.10.).
-  private routenOberflaeche(): Route[] {
-    const F = 'fremdePost' as const, O = 'offen' as const;
-    return [
-      ...this.seitenfehler.routen(),   // R7: POST /seite/fehler
-      { methode: 'GET', pfad: '/strom', schutz: O, handler: (q, a) => this.strom(q, a) },
-      { methode: 'GET', pfad: '/bestand', schutz: O, handler: (_q, a) => this.json(a, 200, leseBestand(this.opt.bestand)) },
-      { methode: 'GET', pfad: '/mediathek/anschluss', schutz: O, handler: (_q, a, url) => this.anschlussAus(url, a) },
-      { methode: 'GET', pfad: '/mediathek', schutz: O, handler: (_q, a, url) => this.mediathekSuche(url, a) },
-      { methode: 'GET', pfad: '/mediathek/vorbereiten', schutz: O, handler: (_q, a, url) => this.vorbereitenStand(url, a) },
-      { methode: 'POST', pfad: '/mediathek/vorbereiten', schutz: F, handler: async (q, a) => this.vorbereiten(await this.koerper(q), a) },
-      { methode: 'GET', pfad: '/stoebern', schutz: O, handler: (_q, a, url) => (url.searchParams.get('typ') === 'strudel' ? this.stoebernMuster(url, a) : this.stoebern(url, a)) },
-      { methode: 'GET', pfad: '/stoebern/quellen', schutz: O, handler: (_q, a, url) => this.stoebernQuellen(url, a) },
-      { methode: 'GET', pfad: '/stoebern/detail', schutz: O, handler: (_q, a, url) => this.stoebernDetail(url, a) },
-      { methode: 'GET', pfad: '/stoebern/baum', schutz: O, handler: (_q, a, url) => (url.searchParams.get('typ') === 'strudel' ? this.stoebernMusterBaum(a) : this.stoebernBaum(url, a)) },
-      { methode: 'POST', pfad: '/muster', schutz: F, handler: (q, a) => this.musterSpeichern(q, a) },
-      { methode: 'GET', pfad: '/vorhoeren', schutz: O, handler: async (_q, a) => this.json(a, 200, await this.vorhoeren.stand()) },
-      { methode: 'POST', pfad: '/vorhoeren', schutz: F, handler: async (q, a) => this.vorhoerenAus(await this.koerper(q), a) },   // S7: Vorhören als Kern-Eingang
-      { methode: 'GET', pfad: '/klaenge/karte', schutz: O, handler: (_q, a) => this.klaengeKarte(a) },
-      { methode: 'GET', pfad: '/klaenge', schutz: O, handler: (_q, a, url) => this.klaengeSuche(url, a) },
-      { methode: 'GET', pfad: '/mediathek/listen', schutz: O, handler: (_q, a) => { try { return this.json(a, 200, this.mediathek.listen()); } catch (e) { return this.mediathekFehler(e, a); } } },
-      { methode: '*', pfad: (p) => p === '/sammlungen' || p.startsWith('/sammlungen/'), schutz: F, handler: (q, a, url) => this.sammlungRoute(q, url, a) },
-      { methode: 'GET', pfad: '/konfig', schutz: O, handler: (_q, a) => this.json(a, 200, { leitstand_ws: `ws://127.0.0.1:${this.opt.leitstandWs}/`, ziel_kurve: this.opt.zielKurve ?? ZIEL_KURVE,
-        kern_pruefmodus: this.pruefmodus }) },
-      { methode: 'POST', pfad: '/griff', schutz: F, handler: async (q, a) => this.griff(await this.koerper(q), a) },   // Riegel 2026-09-30
-      { methode: 'GET', pfad: '/lage', schutz: O, handler: (_q, a) => this.json(a, 200, this.lage()) },
-      { methode: 'POST', pfad: '/plaetze', schutz: F, handler: async (q, a) => this.plaetzeSetzen(await this.koerper(q), a) },
-      { methode: 'GET', pfad: '/spektrum', schutz: O, handler: (_q, a) => this.json(a, 200, this.spektrum()) },   // 1.15 A7b
-      { methode: 'GET', pfad: '/ausgang', schutz: O, handler: (_q, a) => this.json(a, 200, leseAusgang(this.opt.digitalout)) },   // Glanz 2.1 (F22)
-      { methode: 'POST', pfad: ['/deck/start', '/deck/stopp'], schutz: F, handler: async (q, a, url) => await this.deckStartStopp(url.pathname === '/deck/start', await this.koerper(q), a) },   // Plan Hand T5
-      { methode: 'POST', pfad: '/abbruch', schutz: F, handler: async (_q, a) => {   // Plan Hand T8: Cypher bricht die eigenen Teile ab
-        if (this.quelle() !== 'cypher') return this.json(a, 403, { fehler: 'nur_cypher', text: 'Andreas stops Cypher with Stop Cypher' });
-        const felder = { id: Number(++this.id), quelle: 'cypher', plan: 'cypher', teile: '*' };
-        this.kern.sende('/k/abbruch', felder);
-        this.gesendet++;
-        this.fahrtEnde.clear();
-        await this.cypherSpurenAbbrechen();   // Studio S6: „alle meine Rampen“
-        return this.json(a, 200, { ok: true, felder });
-      } },
-      { methode: 'GET', pfad: '/pegel', schutz: O, handler: (_q, a, url) => {   // Schnappschuss der letzten N Sekunden je Kanal
-        const roh = url.searchParams.get('sek');
-        const sek = roh === null ? 3 : Number(roh);
-        if (roh !== null && !/^\d+$/.test(roh) || !Number.isInteger(sek) || sek < 1 || sek > 10) return this.json(a, 400, { fehler: 'sek', text: 'sek must be an integer 1..10' });
-        return this.json(a, 200, { sek, kanaele: this.pegelPuffer.lies(sek) });
-      } },
-      { methode: 'GET', pfad: '/spur', schutz: O, handler: (_q, a) => this.json(a, 200, this.spurListe()) },
-      { methode: 'POST', pfad: '/szene', schutz: F, handler: async (q, a) => { const d = await this.koerper(q); if (!this.aktionPasst(q, d, a)) return; await this.szene(d, a); } },   // strand 11 slice 5: live scenes
-      { methode: 'POST', pfad: '/aufbau', schutz: F, handler: async (q, a) => { const d = await this.koerper(q); if (!this.aktionPasst(q, d, a)) return; await this.aufbau(d, a); } },   // strand 11 slice 7: session setups
-      { methode: 'POST', pfad: ['/spur', '/spur/stopp'], schutz: F, handler: async (q, a, url) => {   // Studio S6
-        const d = await this.koerper(q);
-        return url.pathname === '/spur' ? await this.spurStart(d, a) : await this.spurStopp(d, a);
-      } },
-      { methode: 'POST', pfad: '/bogen', schutz: F, handler: async (q, a) => await this.bogenStart(await this.koerper(q), a) },   // strand 11 task 7.5
-      { methode: 'POST', pfad: '/spur/aendern', schutz: F, handler: async (q, a) => await this.spurAendern(await this.koerper(q), a) },   // 1.12 S7
-      { methode: 'POST', pfad: '/regler', schutz: F, handler: async (q, a) => await this.regler(await this.koerper(q), a) },   // Plan Hand
-      { methode: 'POST', pfad: '/taste', schutz: F, handler: async (q, a) => this.taste(await this.koerper(q), a) },   // Riegel 2026-09-30
-      { methode: 'POST', pfad: '/laden', schutz: F, handler: async (q, a) => await this.laden(await this.koerper(q), a) },   // Riegel 2026-09-30
-      { methode: 'POST', pfad: '/tempo', schutz: F, handler: async (q, a) => await this.tempo(await this.koerper(q), a) },   // Plan Tempo-Folge: Master-Tempo, Andreas' Hand
-      { methode: 'GET', pfad: '/loops', schutz: O, handler: (_q, a) => this.json(a, 200, leseLoops(this.loopOrdner())) },
-      { methode: 'POST', pfad: '/loops/aus-katalog', schutz: F, handler: async (q, a) => this.loopAusKatalog(await this.koerper(q), a) },   // Browser S6
-      { methode: 'POST', pfad: '/loop', schutz: F, handler: async (q, a) => this.loop(await this.koerper(q), a) },   // Riegel 2026-09-30
-      { methode: 'GET', pfad: '/deck/hotcues', schutz: O, handler: (_q, a, url) => this.hotcuesAus(Number(url.searchParams.get('deck')), a) },
-      { methode: 'GET', pfad: '/deck/loop', schutz: O, handler: (_q, a, url) => {   // aktiver Deck-Loop für die Anzeige, {} ohne
-        const st = this.deckStand(Number(url.searchParams.get('deck')));
-        const l = st ? this.loopVon(st) : null;
-        return this.json(a, 200, l ? { start: Math.round(l.start * 1000) / 1000, laenge: l.laenge } : {});
-      } },
-      { methode: 'GET', pfad: '/deck/raster', schutz: O, handler: (_q, a, url) => {
-        // D1 S3 Auftrag 15: nur an das gebunden, was rasterWert braucht (geladenes Deck mit Fassung), nicht an deckStand (Uhr, /zustand/deck)
-        const deck = Number(url.searchParams.get('deck')), f = this.rasterFassung(deck);
-        return f ? this.json(a, 200, this.rasterWert(deck, f)) : this.json(a, 409, { fehler: 'kein_kernstand' });   // Form wie bisher (Route-Golden)
-      } },
-      { methode: 'GET', pfad: '/hoeren', schutz: O, handler: (_q, a, url) => this.hoerenAus(url, a) },
-      { methode: 'GET', pfad: '/analyse/live', schutz: O, handler: (_q, a) => this.analyseLiveAus(a) },
-      { methode: 'GET', pfad: '/analyse/pegel', schutz: O, handler: (_q, a) => this.analysePegelAus(a) },
-      { methode: 'POST', pfad: '/analyse/pegel/reset', schutz: F, handler: async (q, a) => { await this.koerper(q); this.analysePegelAus(a, true); } },
-      { methode: 'GET', pfad: '/oszi', schutz: O, handler: (_q, a, url) => this.osziAus(url, a) },
-      { methode: 'GET', pfad: '/fx', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fx) },   // [FX1, FX2] oder null je Einheit
-      { methode: 'GET', pfad: '/fx/zuweisung', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fxZuweisung) },
-      { methode: 'GET', pfad: '/graphen', schutz: O, handler: (_q, a) => this.json(a, 200, { ...listeGraphen(undefined, { ordner: this.opt.samplerOrdner }), geladen: this.stand.graphen_geladen, geladen_geprueft_vor_ms: this.graphenVomKernMs === null ? null : Date.now() - this.graphenVomKernMs }) },   // Baukasten S12/S16
-      { methode: 'GET', pfad: '/graphen/panel', schutz: O, handler: (_q, a, url) => {   // front panel of one graph (sidecar panels/<name>.json) plus its knob ranges
-        const r = ladePanel(url.searchParams.get('name') ?? '');
-        if (!r) return this.json(a, 404, { fehler: 'unbekannt' });
-        if (!r.panel) { const g = geraetePanel({ art: 'bk', graph: r.name }); if (g.panel) r.panel = g.panel; }   // no file or a refused one (fehler keeps its problems): the automatic panel
-        return this.json(a, 200, r);
-      } },
-      { methode: 'GET', pfad: '/geraete/panel', schutz: O, handler: (_q, a, url) => {   // panel and parameter table of a device: ?art=bk&graph=<name> | ?art=rb338 | ?art=surge
-        const art = url.searchParams.get('art') ?? '';
-        if (art !== 'bk' && art !== 'rb338' && art !== 'surge') return this.json(a, 400, { fehler: 'art' });
-        if (art !== 'bk') return this.json(a, 200, geraetePanel({ art }));
-        const graph = url.searchParams.get('graph') ?? '';
-        if (!findeGraph(graph)) return this.json(a, 404, { fehler: 'unbekannt' });
-        return this.json(a, 200, geraetePanel({ art: 'bk', graph }));
-      } },
-      { methode: 'POST', pfad: '/graph', schutz: F, handler: async (q, a) => this.graphLaden(await this.koerper(q), a) },
-      { methode: 'GET', pfad: '/fx/routing', schutz: O, handler: (_q, a) => this.json(a, 200, { routing: this.stand.fxRouting }) },
-      { methode: 'POST', pfad: '/fx/routing', schutz: F, handler: async (q, a) => {   // Ohr T18: the Insert / Post Fader switch; strand 11: Cypher may switch it too (Stop Cypher still refuses)
-        if (this.quelle() === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
-        const d = await this.koerper(q);
-        if (d.routing !== 'post_fader' && d.routing !== 'insert') return this.json(a, 400, { fehler: 'routing' });
-        const felder = this.fxRoutingSenden(d.routing, this.quelle());
-        this.fxRoutingWunsch = d.routing;
-        return this.json(a, 200, { ok: true, felder, quittung: await this.warteQuittung(felder.id) });
-      } },
-      { methode: 'POST', pfad: ['/fx', '/fx/zuweisung'], schutz: F, handler: async (q, a, url) => {
-        const d = await this.koerper(q);
-        if (this.fxRiegel(a)) return;
-        return url.pathname === '/fx' ? this.fx(d, a) : this.fxZuweisung(d, a);
-      } },
-      { methode: 'POST', pfad: ['/deck/sprung', '/deck/scrub', '/deck/hotcue', '/deck/loop', '/deck/loop/sichern', '/deck/raster', '/deck/raster/fix'], schutz: F, handler: async (q, a, url) => {   // Plan E9
-        const d = await this.koerper(q);
-        // Review Hand B1 / I3d: Sprung, Hotcue spielen auf einem OFFENEN Deck bringt ungehörten Inhalt; für cypher gesperrt,
-        // bis das Ohr Hörscheine ausstellt. Loop ist frei (wiederholt Gehörtes). Andreas' Weg bleibt unberührt.
-        if (this.quelle() === 'cypher' && istOffenesDeck(d.deck) && kanalOffen(this.stand.regler, pultContainerPfad[d.deck - 1])
-          && (url.pathname === '/deck/sprung' || (url.pathname === '/deck/scrub' && d.phase !== 0) || (url.pathname === '/deck/hotcue' && d.aktion === 'spielen'))) {
-          return this.json(a, 409, { fehler: 'ziel_ungehoert', text: 'deck is open; jumping there plays unheard material' });
-        }
-        if (url.pathname === '/deck/sprung') return this.deckSprung(d, a);
-        if (url.pathname === '/deck/scrub') return this.deckScrub(d, a);
-        if (url.pathname === '/deck/loop') return this.deckLoop(d, a);
-        if (url.pathname === '/deck/loop/sichern') return this.deckLoopSichern(d, a);
-        if ((url.pathname === '/deck/raster' || url.pathname === '/deck/raster/fix') && this.quelle() === 'cypher') {
-          // strand 11: Cypher may move the grid; the old grid goes into the log line, so it is reversible
-          if (this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
-          const st = istOffenesDeck(d.deck) ? this.deckStand(d.deck) : null;
-          this.opt.log?.({ typ: 'raster_cypher', deck: d.deck, vorher: st ? this.rasterWert(st.deck, st.f) : null });
-        }
-        if (url.pathname === '/deck/raster') return this.deckRaster(d, a);
-        if (url.pathname === '/deck/raster/fix') return this.deckRasterFix(d, a);
-        return this.deckHotcue(d, a);
-      } },
-      { methode: 'GET', pfad: '/harmonie', schutz: O, handler: (_q, a) => this.json(a, 200, this.harmonie.lesen(this.harmonieTakte()) ?? { tonart: null, folge: [], takte_je_akkord: null, ab_takt: null, jetzt: { takt: this.harmonieTakte().jetzt, akkord: null }, naechster_wechsel_takt: null }) },
-      { methode: 'POST', pfad: '/harmonie', schutz: F, handler: async (q, a) => {
-        const d = await this.koerper(q);
-        if (this.quelle() === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
-        try {
-          const r = this.harmonie.setze(d, this.harmonieTakte());
-          if (!r.probe) this.opt.log?.({ typ: 'harmonie', tonart: r.tonart, folge: r.folge, ab_takt: r.ab_takt });
-          return this.json(a, 200, r);
-        } catch (e) {
-          if (e instanceof HarmonieFehler) return this.json(a, e.code, { fehler: e.fehler, text: e.message, ...e.extra });
-          throw e;
-        }
-      } },
-      { methode: 'GET', pfad: '/strudel', schutz: O, handler: (_q, a, url) => {
-        const strom = Oberflaeche.strom(url.searchParams.get('strom'));
-        if (strom === null) return this.json(a, 400, { fehler: 'strom' });
-        return this.json(a, 200, leseMusterStand(this.musterOrdner(strom)));
-      } },
-      { methode: 'POST', pfad: ['/strudel', '/strudel/autonom'], schutz: F, handler: async (q, a, url) => {
-        if (url.pathname === '/strudel/autonom') {
-          if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas' });   // sein AUTO-Schalter (Review M5)
-          const d = await this.koerper(q);
-          if (typeof d.an !== 'boolean') return this.json(a, 400, { fehler: 'an_muss_bool' });
-          const strom = Oberflaeche.strom(d.strom);
-          if (strom === null) return this.json(a, 400, { fehler: 'strom' });
-          setzeAutonom(this.musterOrdner(strom), d.an);
-          this.opt.log?.({ typ: 'autonom', an: d.an, strom });
-          if (d.an === false && strom === 1) this.fxCypherAuslaufen();   // FX-Riegel hängt an Strom 1 (Plan: unverändert)
-          return this.json(a, 200, { ok: true, autonom: d.an });
-        }
-        return await this.strudel(await this.koerper(q), a);
-      } },
-      // Demo overlay (2026-11-07): one line of text that the page shows over every view, "what Cypher is doing now". Both
-      // sources may set it; an empty text clears it. GET answers the current line (null without one).
-      { methode: 'GET', pfad: '/ansage', schutz: O, handler: (_q, a) => this.json(a, 200, { ansage: this.ansageZeile }) },
-      { methode: 'POST', pfad: '/ansage', schutz: F, handler: async (q, a) => {
-        const d = await this.koerper(q);
-        if (typeof d.text !== 'string') return this.json(a, 400, { fehler: 'text_muss_text' });
-        const text = d.text.replace(/\s+/g, ' ').trim();
-        if (text.length > 300) return this.json(a, 400, { fehler: 'text_zu_lang', max: 300 });
-        const art = d.quelle === 'stimme' ? 'stimme' : 'tat';
-        this.ansageZeile = text ? { text, art, von: this.quelle(), zeit: Date.now() } : null;
-        this.verteile({ a: 'ansage', f: this.ansageZeile });
-        return this.json(a, 200, { ok: true, ansage: this.ansageZeile });
-      } },
-      { methode: 'GET', pfad: '/klang', schutz: O, handler: (_q, a) => this.json(a, 200, this.leseWirtMeldungen()) },   // Task 3: was die Wirte gerade melden (wirt-<gruppe>.json), null ohne Datei
-      { methode: 'POST', pfad: '/klang', schutz: F, handler: async (q, a) => { const d = await this.koerper(q); if (!this.aktionPasst(q, d, a)) return; await this.klang(d, a); } },
-      { methode: 'GET', pfad: '/welle', schutz: O, handler: async (_q, a, url) => await this.welleAus(url, a) },
-      { methode: 'GET', pfad: '/fassung', schutz: O, handler: (_q, a, url) => this.fassungAus(url, a) },
-    ];
-  }
+  private neuerAufruf(...a: Parameters<typeof AN.neuerAufruf>) { return AN.neuerAufruf.call(this, ...a); }
+  private anfrageInnen(...a: Parameters<typeof AN.anfrageInnen>) { return AN.anfrageInnen.call(this, ...a); }
+  private routenOberflaeche(...a: Parameters<typeof AN.routenOberflaeche>) { return AN.routenOberflaeche.call(this, ...a); }
 
   private strom(q: http.IncomingMessage, a: http.ServerResponse): void {
     a.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
@@ -3586,31 +687,7 @@ export class Oberflaeche {
     q.on('close', () => this.stroeme.delete(a));
   }
 
-  // Ein Griff: pfad aus ZIELE, u = midi_roh 0..1. Riegel vor dem Senden: falsches Ziel → 400, nichts an den Kern.
-  private griff(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_hand' });   // Plan Hand D1: die Hand ist Andreas
-    const pfad = d.pfad;
-    const u = d.u;
-    const riegel = !(this.opt.mutationen ?? []).includes('riegel_aus');
-    if (typeof pfad !== 'string' || (riegel && !ZIELE.has(pfad))) {
-      this.opt.log?.({ typ: 'abgelehnt', grund: 'unbekanntes_ziel', pfad });
-      return this.json(a, 400, { fehler: 'unbekanntes_ziel', pfad });
-    }
-    if (typeof u !== 'number' || !(u >= 0 && u <= 1)) {
-      this.opt.log?.({ typ: 'abgelehnt', grund: 'ausserhalb_bereich', pfad, u });
-      return this.json(a, 400, { fehler: 'ausserhalb_bereich', pfad });
-    }
-    if (pfad.length > 47) return this.json(a, 400, { fehler: 'unbekanntes_ziel', pfad });
-    // Kern ohne Prüfmodus: /test/hand käme nie an. Sichtbar ablehnen statt still 200 (bis 35 hand_osc bringt).
-    if (this.pruefmodus === 'aus') {
-      this.opt.log?.({ typ: 'abgelehnt', grund: 'pruefmodus_aus', pfad });
-      return this.json(a, 409, { fehler: 'pruefmodus_aus', pfad, text: HAND_PRUEFMODUS_TEXT });
-    }
-    const felder = { pfad, midi_roh: u, sample: this.kern.uhr?.sample ?? 0 };
-    this.kern.sende('/test/hand', felder);
-    this.gesendet++;
-    this.json(a, 200, { ok: true, gesendet: '/test/hand', felder });
-  }
+  private griff(...a: Parameters<typeof AN.griff>) { return AN.griff.call(this, ...a); }
 
   // Eine Taste für den Leitstand (Plan M-1, Annahme-Weg): Andreas drückt „annehmen“ oder „verwerfen“ für Cyphers Vorschlag,
   // „stopp“/„freigabe“ für Cypher selbst. Der Kern meldet daraus dasselbe /e/taste wie eine Hardware-Taste (Scheibe 35, Zusatz),
@@ -3636,213 +713,23 @@ export class Oberflaeche {
     this.json(a, 200, { ok: true, gesendet: '/test/hand', felder });
   }
 
-  // Mediathek T2 (Plan 2026-10-03): Suche über die ganze Mediathek (nur lesen) und Vorbereiten durch die Werkstatt.
-  // Kein Kern-Befehl in diesen Routen; ins Deck kommt ein vorbereiteter Track wie jeder andere über POST /laden.
-  // Anschluss-Vorauswahl (Plan 2026-10-10-anschluss-vorauswahl, T3/T4): material_id oder deck (1|2), energie halten|heben|senken,
-  // fenster in Prozent (Vorgabe 6, 1..16), limit (Vorgabe 10).
-  private anschlussAus(url: URL, a: http.ServerResponse): void {
-    try {
-      const p = url.searchParams;
-      let mid = p.get('material_id');
-      const deck = p.get('deck');
-      if (mid && deck) return this.json(a, 400, { fehler: 'material_id_oder_deck' });
-      if (!mid && deck) {
-        if (deck !== '1' && deck !== '2') return this.json(a, 400, { fehler: 'deck_ungueltig' });
-        mid = (this.stand.geladen[deck]?.material_id as string | undefined) ?? null;
-        if (!mid) return this.json(a, 409, { fehler: 'deck_leer' });
-      }
-      if (!mid) return this.json(a, 400, { fehler: 'material_id_oder_deck' });
-      const energie = p.get('energie') ?? 'halten';
-      if (energie !== 'halten' && energie !== 'heben' && energie !== 'senken') return this.json(a, 400, { fehler: 'energie_ungueltig' });
-      const zahlOder = (s: string | null, vorgabe: number): number => { if (s === null || s === '') return vorgabe; const n = Number(s); return Number.isFinite(n) ? n : vorgabe; };
-      const fenster = Math.min(16, Math.max(1, zahlOder(p.get('fenster'), 6)));
-      const limit = Math.min(50, Math.max(1, Math.floor(zahlOder(p.get('limit'), 10))));
-      this.json(a, 200, this.mediathek.anschluss(mid, { fenster, energie, limit }, bestandIds(this.opt.bestand), (m) => this.vorbereiter.anzeige(m)));
-    } catch (e) { this.mediathekFehler(e, a); }
-  }
-
-  private mediathekSuche(url: URL, a: http.ServerResponse): void {
-    try {
-      const p = url.searchParams;
-      const bpm = p.get('bpm');
-      const antwort = this.mediathek.suche({ text: p.get('text') || undefined, camelot: p.get('camelot') || undefined,
-        bpm: bpm ? parseBpm(bpm) : undefined, genre: p.get('genre') || undefined, limit: parseLimit(p.get('limit')) },
-        bestandIds(this.opt.bestand), (mid) => this.vorbereiter.anzeige(mid));
-      this.json(a, 200, antwort);
-    } catch (e) { this.mediathekFehler(e, a); }
-  }
-
-  // Klänge (Plan 2026-10-06-klaenge, T1): eigene Loop-Bibliothek (sofort, ladbar) vor den Mediathek-Klängen. Fehlt die Mediathek,
-  // bleibt die Antwort 200 mit mediathek:'fehlt' (die Loops spielen trotzdem), sonst wie /mediathek.
-  private klaengeSuche(url: URL, a: http.ServerResponse): void {
-    try {
-      const p = url.searchParams;
-      const typ = p.get('typ') || undefined, einsatz = p.get('einsatz') || undefined, bpmRoh = p.get('bpm');
-      if (typ !== undefined && !(KLANG_TYPEN as readonly string[]).includes(typ)) throw new MediathekFehler(400, 'typ_ungueltig');
-      if (einsatz !== undefined && !['sofort', 'werkstatt', 'nur_live'].includes(einsatz)) throw new MediathekFehler(400, 'einsatz_ungueltig');
-      const bpm = bpmRoh ? parseBpm(bpmRoh) : undefined;
-      const text = p.get('text') || undefined, pack = p.get('pack') || undefined, camelot = p.get('camelot') || undefined;
-      const limit = Number.isFinite(Math.floor(Number(p.get('limit') || NaN))) ? parseLimit(p.get('limit')) : 30;
-      // Loop-Bibliothek: Loops sind 128 bpm, ohne pack/camelot; nur ladbare spielen jetzt
-      const loopsOk = (typ === undefined || typ === 'loop') && (einsatz === undefined || einsatz === 'sofort') && pack === undefined && camelot === undefined
-        && (bpm === undefined || (bpm[0] <= 128 && 128 <= bpm[1]));
-      const eigene: KlangTreffer[] = !loopsOk ? [] : leseLoops(this.loopOrdner())
-        .filter((l) => l.ladbar && (text === undefined || l.name.includes(text.toLowerCase())))
-        .map((l): KlangTreffer => ({ sha: null, pfad: null, pfad_da: true, typ: 'loop', pack: null, kategorie: null, instrument: null, titel: l.name,
-          dauer_s: l.beats * 60 / 128, bpm: 128, camelot: null, einsatz: 'sofort', quelle: 'loopbib', name: l.name }));
-      if (!this.mediathek.vorhanden()) return this.json(a, 200, { treffer: eigene.slice(0, limit), gesamt: eigene.length, gesamt_genau: true, mediathek: 'fehlt' });
-      const m = (einsatz === 'sofort') ? { treffer: [] as KlangTreffer[], gesamt: 0 }
-        : this.mediathek.klaenge({ text, typ, pack, einsatz, bpm, camelot, limit: Math.max(1, limit - Math.min(eigene.length, limit)) });
-      this.json(a, 200, { treffer: [...eigene, ...m.treffer].slice(0, limit), gesamt: eigene.length + m.gesamt, gesamt_genau: true });
-    } catch (e) { this.mediathekFehler(e, a); }
-  }
+  private anschlussAus(...a: Parameters<typeof AN.anschlussAus>) { return AN.anschlussAus.call(this, ...a); }
+  private mediathekSuche(...a: Parameters<typeof ST.mediathekSuche>) { return ST.mediathekSuche.call(this, ...a); }
+  private klaengeSuche(...a: Parameters<typeof ST.klaengeSuche>) { return ST.klaengeSuche.call(this, ...a); }
 
   // Karte: die Mediathek-Zahlen ändern sich nur nach einem Scan, darum je DB-Stand zwischengespeichert; die Loop-Bibliothek wird jedes Mal frisch gezählt.
   private karteCache: { stand: number; karte: ReturnType<Mediathek['karte']> } | null = null;
-  private klaengeKarte(a: http.ServerResponse): void {
-    try {
-      const loopbib = leseLoops(this.loopOrdner()).filter((l) => l.ladbar).length;
-      const je: Record<string, { gesamt: number; sofort: number; werkstatt: number; nur_live: number }> = {};
-      for (const t of KLANG_TYPEN) je[t] = { gesamt: 0, sofort: 0, werkstatt: 0, nur_live: 0 };
-      let packs: { pack: string; gesamt: number; nur_live: number }[] = [], stand: string | null = null;
-      const fehlt = !this.mediathek.vorhanden();
-      if (!fehlt) {
-        const st = this.mediathek.stand();
-        if (this.karteCache === null || this.karteCache.stand !== st) this.karteCache = { stand: st, karte: this.mediathek.karte() };
-        const k = this.karteCache.karte;
-        for (const t of KLANG_TYPEN) je[t] = { gesamt: k.je_typ[t].gesamt, sofort: 0, werkstatt: k.je_typ[t].werkstatt, nur_live: k.je_typ[t].nur_live };
-        packs = k.packs; stand = k.mediathek_stand;
-      }
-      je.loop.gesamt += loopbib; je.loop.sofort += loopbib;
-      this.json(a, 200, { je_typ: je, packs, loopbib, mediathek_stand: stand, erzeugt_am: new Date().toISOString(), ...(fehlt ? { mediathek: 'fehlt' } : {}) });
-    } catch (e) { this.mediathekFehler(e, a); }
-  }
-
-  private mediathekFehler(e: unknown, a: http.ServerResponse): void {
-    if (e instanceof MediathekFehler) return this.json(a, e.code, { fehler: e.fehler });
-    this.opt.log?.({ typ: 'mediathek_fehler', text: (e as Error).message });
-    this.json(a, 500, { fehler: 'mediathek_abfrage', text: (e as Error).message });
-  }
-
-  // Browser (Plan 2026-10-10-mediathek-browser): eine Seite des Katalogs je Typ. Status nur für die angezeigten Zeilen.
-  private stoebern(url: URL, a: http.ServerResponse): void {
-    try {
-      const p = url.searchParams;
-      const typ = p.get('typ') ?? 'track';
-      if (!(KATALOG_TYPEN as readonly string[]).includes(typ)) throw new KatalogFehler(400, 'typ_ungueltig');
-      const t = typ as Typ;
-      const sort = p.get('sort') || SORT_VORGABE[t];
-      const ab = p.get('richtung') === 'ab';
-      const lroh = Math.floor(Number(p.get('limit') ?? SEITE_VORGABE));
-      const limit = Number.isFinite(lroh) ? Math.min(SEITE_MAX, Math.max(1, lroh)) : SEITE_VORGABE;
-      const sroh = Math.floor(Number(p.get('seite') ?? 0));
-      const seite = Number.isFinite(sroh) && sroh > 0 ? sroh : 0;
-      if (!Number.isSafeInteger(seite * limit)) throw new KatalogFehler(400, 'seite_ungueltig');   // 1e300 → sonst SQLite „datatype mismatch“ (Review MINOR 5)
-      const filter = this.stoebernFilter(p);
-      if (Oberflaeche.schutzAus(p)) filter.ohneSchutz = true;
-      const vorrang = Oberflaeche.vorrangAn(p);
-      const rang = rangVon(this.kollektionSpeicher());   // read once per request: rank for the order, favorit for the rows
-      const r = this.katalog.seite(t, filter, sort, ab, seite, limit, vorrang
-        ? { fehlend: this.katalog.ordnerSummen(t).ordner.filter((o) => !this.erreichbar.ordnerDa(o.pfad)).map((o) => o.pfad), rang: rang.tabelle } : undefined);
-      const bestand = t === 'track' ? bestandIds(this.opt.bestand) : new Set<string>();
-      this.json(a, 200, { typ: t, sort, richtung: ab ? 'ab' : 'auf', seite, limit, gesamt: r.gesamt, gebaut_am: r.gebaut_am, ...(vorrang ? { vorrang: true } : {}),
-        treffer: r.zeilen.map((z) => ({ ...this.stoebernTreffer(z, bestand), favorit: rang.favorit(z.sha) })) });
-    } catch (e) { this.katalogFehler(e, a); }
-  }
+  private klaengeKarte(...a: Parameters<typeof ST.klaengeKarte>) { return ST.klaengeKarte.call(this, ...a); }
+  private mediathekFehler(...a: Parameters<typeof ST.mediathekFehler>) { return ST.mediathekFehler.call(this, ...a); }
+  private stoebern(...a: Parameters<typeof ST.stoebern>) { return ST.stoebern.call(this, ...a); }
 
   private kollektionLeser?: KollektionSpeicher;
-  private kollektionSpeicher(): KollektionSpeicher {
-    return this.kollektionLeser ??= this.opt.kollektionen?.speicher ?? new KollektionSpeicher(this.opt.kollektionen ?? {});
-  }
-
-  // STRUDEL im Browser (S2b): ~250 Einträge, deshalb im Speicher filtern/sortieren statt FTS
-  private async stoebernMuster(url: URL, a: http.ServerResponse): Promise<void> {
-    try {
-      const p = url.searchParams;
-      let l = await this.muster.liste();
-      // Muster liegen im Speicher (~250): Textvergleich statt FTS. Wörter UND-verknüpft, je Wort Teilstring in Name, Code oder Rolle;
-      // name:/rolle: schränken auf ein Feld ein. Die Katalog-Felder (artist:, label:, folder: …) gibt es hier nicht: 400, kein stilles Ignorieren.
-      const { terme, ordner, zuviele } = suchTerme(p.get('text') ?? '', ['rolle']);
-      if (zuviele) throw new KatalogFehler(400, 'zu_viele_suchwoerter');
-      if ((p.get('ordner') ?? '') !== '') throw new KatalogFehler(400, 'filter_nicht_anwendbar');   // Muster liegen in keinem Ordner (S4-Review 6)
-      if (ordner.length || terme.some((x) => x.spalte !== null && x.spalte !== 'name' && x.spalte !== 'rolle')) throw new KatalogFehler(400, 'suchfeld_nicht_anwendbar');
-      for (const x of terme) {
-        const w = x.wert.toLowerCase();
-        l = l.filter((e) => x.spalte === 'name' ? e.name.toLowerCase().includes(w) : x.spalte === 'rolle' ? (e.rolle ?? '').includes(w)
-          : e.name.toLowerCase().includes(w) || e.text.toLowerCase().includes(w) || (e.rolle ?? '').includes(w));
-      }
-      Oberflaeche.filterPruefen(p, 'strudel');
-      const bpmRoh = p.get('bpm');
-      if (bpmRoh) { const [lo, hi] = parseBpm(bpmRoh); l = l.filter((e) => e.bpm !== null && e.bpm >= lo && e.bpm <= hi); }
-      const feld = p.get('feld'), wert = p.get('wert') ?? '';
-      if (feld === 'quelle') l = l.filter((e) => e.quelle === wert); else if (feld === 'rolle') l = l.filter((e) => (e.rolle ?? '') === wert);
-      else if (feld) throw new KatalogFehler(400, 'facette_ungueltig');
-      const sort = p.get('sort') || 'name', ab = p.get('richtung') === 'ab';
-      if (!['name', 'rolle', 'quelle', 'bpm', 'takte'].includes(sort)) throw new KatalogFehler(400, 'sort_ungueltig');
-      const wertVon = (e: MusterEintrag): string | number => (e[sort as keyof MusterEintrag] ?? '') as string | number;
-      l.sort((x, y) => { const u = wertVon(x), v = wertVon(y); const c = typeof u === 'number' && typeof v === 'number' ? u - v : String(u).localeCompare(String(v), 'en', { sensitivity: 'base' }); return (ab ? -c : c) || x.id.localeCompare(y.id); });
-      const limit = Math.min(SEITE_MAX, Math.max(1, Math.floor(Number(p.get('limit') ?? SEITE_VORGABE)) || SEITE_VORGABE));
-      const seite = Math.max(0, Math.floor(Number(p.get('seite') ?? 0)) || 0);
-      this.json(a, 200, { typ: 'strudel', sort, richtung: ab ? 'ab' : 'auf', seite, limit, gesamt: l.length, gebaut_am: '',
-        treffer: l.slice(seite * limit, (seite + 1) * limit).map((e) => ({ typ: 'strudel', ...e })) });
-    } catch (e) { this.katalogFehler(e, a); }
-  }
-
-  private async stoebernMusterBaum(a: http.ServerResponse): Promise<void> {
-    try {
-      const l = await this.muster.liste();
-      const zaehle = (werte: string[]): { wert: string; n: number }[] => {
-        const z = new Map<string, number>();
-        for (const w of werte) z.set(w, (z.get(w) ?? 0) + 1);
-        return [...z].map(([wert, n]) => ({ wert, n })).sort((x, y) => y.n - x.n || x.wert.localeCompare(y.wert));
-      };
-      this.json(a, 200, { ordner: [], facetten: { quelle: zaehle(l.map((e) => e.quelle)), rolle: zaehle(l.map((e) => e.rolle ?? '')) }, gebaut_am: '' });
-    } catch (e) { this.katalogFehler(e, a); }
-  }
-
-  // SAVE am Strudel-Deck: gespeichert wird, was die Instanz SPIELT, nie Text aus der Anfrage (Andreas: „das laufende Muster“)
-  private async musterSpeichern(q: http.IncomingMessage, a: http.ServerResponse): Promise<void> {   // fremdePost: Router (Task 9)
-    try {
-      const d = await this.koerper(q);
-      const strom = Oberflaeche.strom(d.strom);
-      if (strom === null || strom > 3) return this.json(a, 400, { fehler: 'strom' });   // S18: the pattern library has roles for streams 1..3 only
-      const laufend = leseMusterStand(this.musterOrdner(strom)).text;
-      const r = this.muster.speichere({ name: String(d.name ?? ''), text: laufend, rolle: (['drums', 'bass', 'melodie'] as const)[strom - 1], strom,
-        von: this.quelle(), ueberschreiben: d.ueberschreiben === true });
-      this.opt.log?.({ typ: 'muster_gespeichert', name: r.name, strom });
-      return this.json(a, 201, r);
-    } catch (e) { if (e instanceof MusterFehler) return this.json(a, e.code, { fehler: e.fehler }); throw e; }
-  }
-
-  // Detail-Spalte (S5): der Eintrag, alle gültigen Angaben mit Quelle (Mediathek) und der volle Pfad. Der Pfad geht nur hier an die
-  // Seite (sie ist lokal), nicht in die Trefferzeilen. Listen-Zeilen kennen nur die material_id: dann ?mid=.
-  private stoebernDetail(url: URL, a: http.ServerResponse): void {
-    try {
-      const sha = url.searchParams.get('sha'), mid = url.searchParams.get('mid');
-      if (sha === null && mid === null) throw new KatalogFehler(400, 'sha_ungueltig');
-      const z = sha !== null ? this.katalog.eintrag(sha) : this.katalog.eintragVonMid(mid ?? '');
-      if (!z) throw new KatalogFehler(404, 'unbekannt');
-      const bestand = z.typ === 'track' ? bestandIds(this.opt.bestand) : new Set<string>();
-      const angaben = this.mediathek.vorhanden() ? this.mediathek.angaben(z.shas.split(' ')) : [];
-      // Das Objekt, auf das gezeigt wurde (sha, oder mid als Präfix): bei einem unterlegenen Objekt DESSEN Datei, nicht die des Gewinners (B6)
-      const objekt = sha !== null ? sha : (z.shas.split(' ').find((x) => x.startsWith(mid ?? '')) ?? z.sha);
-      const treffer = this.stoebernTreffer(z, bestand);
-      let pfad = z.pfad;
-      if (objekt !== z.sha) {
-        pfad = this.mediathek.vorhanden() ? this.mediathek.pfadVon(objekt) : null;
-        treffer.pfad_da = pfad !== null && fs.existsSync(pfad);
-      }
-      this.json(a, 200, { eintrag: treffer, angaben, pfad, objekt_sha: objekt });
-    } catch (e) { this.katalogFehler(e, a); }
-  }
-
-  private stoebernBaum(url: URL, a: http.ServerResponse): void {
-    try {
-      const typ = url.searchParams.get('typ') ?? 'track';
-      if (!(KATALOG_TYPEN as readonly string[]).includes(typ)) throw new KatalogFehler(400, 'typ_ungueltig');
-      this.json(a, 200, this.katalog.baum(typ as Typ, { ohneSchutz: Oberflaeche.schutzAus(url.searchParams) }));
-    } catch (e) { this.katalogFehler(e, a); }
-  }
+  private kollektionSpeicher(...a: Parameters<typeof ST.kollektionSpeicher>) { return ST.kollektionSpeicher.call(this, ...a); }
+  private stoebernMuster(...a: Parameters<typeof ST.stoebernMuster>) { return ST.stoebernMuster.call(this, ...a); }
+  private stoebernMusterBaum(...a: Parameters<typeof ST.stoebernMusterBaum>) { return ST.stoebernMusterBaum.call(this, ...a); }
+  private musterSpeichern(...a: Parameters<typeof ST.musterSpeichern>) { return ST.musterSpeichern.call(this, ...a); }
+  private stoebernDetail(...a: Parameters<typeof ST.stoebernDetail>) { return ST.stoebernDetail.call(this, ...a); }
+  private stoebernBaum(...a: Parameters<typeof ST.stoebernBaum>) { return ST.stoebernBaum.call(this, ...a); }
 
   // `schutz=aus` hides protected rows, `vorrang=1` switches on the priority order; an empty value counts as absent
   private static schutzAus(p: URLSearchParams): boolean {
@@ -3856,20 +743,7 @@ export class Oberflaeche {
     return v === '1';
   }
 
-  // The sources of one type (sampler roots or disks) with their file counts and whether they are mounted now
-  private stoebernQuellen(url: URL, a: http.ServerResponse): void {
-    try {
-      const typ = url.searchParams.get('typ') ?? 'track';
-      if (!(KATALOG_TYPEN as readonly string[]).includes(typ)) throw new KatalogFehler(400, 'typ_ungueltig');
-      const aus = Oberflaeche.schutzAus(url.searchParams);
-      const b = this.katalog.ordnerSummen(typ as Typ, { ohneSchutz: aus });   // one sum per folder, not the whole tree; kept until the catalog file changes
-      const schluessel = `${typ}|${aus}`, alt = this.quellenMerk.get(schluessel);
-      if (alt && alt.b === b && this.jetzt() - alt.t <= ERREICHBAR_TTL_MS) return this.json(a, 200, alt.j);
-      const j = { typ, quellen: quellenLage(b.ordner, leseWurzeln({ ordner: this.opt.samplerOrdner }), this.erreichbar), gebaut_am: b.gebaut_am };
-      this.quellenMerk.set(schluessel, { b, t: this.jetzt(), j });   // the same 10 s window as the reachability
-      this.json(a, 200, j);
-    } catch (e) { this.katalogFehler(e, a); }
-  }
+  private stoebernQuellen(...a: Parameters<typeof ST.stoebernQuellen>) { return ST.stoebernQuellen.call(this, ...a); }
 
   // Filter aus der URL (Task 2.2: Ordner, Facette; Task 3.1/4.2 erweitern)
   // Welche Filter ein Typ hat (wie public/browse.js FILTER_FUER). Ein anderer, gesetzter Filter ist ein 400, kein stilles Ignorieren.
@@ -3879,116 +753,13 @@ export class Oberflaeche {
     for (const k of ['camelot', 'bpm', 'energie']) if ((p.get(k) ?? '') !== '' && !ok.includes(k)) throw new KatalogFehler(400, 'filter_nicht_anwendbar');
   }
 
-  private stoebernFilter(p: URLSearchParams): Filter {
-    Oberflaeche.filterPruefen(p, p.get('typ') ?? 'track');
-    const f: Filter = {};
-    const text = p.get('text'); if (text) f.text = text;
-    const ordner = p.get('ordner'); if (ordner) f.ordner = ordner;
-    const feld = p.get('feld'); if (feld) f.facette = { feld, wert: p.get('wert') ?? '' };
-    const cam = p.get('camelot'); if (cam) { f.camelot = cam; f.nachbarn = p.get('nachbarn') === '1'; }
-    const bpm = p.get('bpm'); if (bpm) f.bpm = parseBpm(bpm);
-    const en = p.get('energie');
-    if (en !== null && en !== '') { if (!['0', '1', '2'].includes(en)) throw new KatalogFehler(400, 'energie_ungueltig'); f.energie = Number(en) as 0 | 1 | 2; }
-    return f;
-  }
-
-  private stoebernTreffer(z: Zeile, bestand: Set<string>): Record<string, unknown> {
-    const { shas, pfad, alle: _alle, id: _id, ...rest } = z;
-    const pfadDa = pfad !== null && fs.existsSync(pfad);
-    const basis: Record<string, unknown> = { ...rest, material_id: z.sha.slice(0, 16), pfad_da: pfadDa, nur_live: z.schutz === 'ableton' };
-    if (z.typ === 'loop') {   // S6: ob und warum der Loop in die Box geht — dieselbe Regel wie der Import (beatsVon), die Seite rechnet nichts nach
-      try { basis.import_beats = beatsVon(z); } catch (e) { if (e instanceof LoopImportFehler) basis.import_grund = e.fehler; else throw e; }
-    }
-    if (z.typ !== 'track') return basis;
-    const laden = shas.split(' ').map((s) => s.slice(0, 16)).find((m) => bestand.has(m)) ?? null;
-    const lauf = this.vorbereiter.stand(basis.material_id);
-    const status = laden ? 'ready' : lauf?.status === 'laeuft' ? 'laeuft' : lauf?.status === 'fehler' ? 'fehler' : pfadDa ? 'prepare' : 'missing';
-    return { ...basis, status, laden_mid: laden, ...(status === 'fehler' ? { grund: lauf?.grund ?? 'unbekannt', ...(lauf?.name ? { grund_stufe: lauf.name } : {}) } : {}) };
-  }
-
-  // Für die Sets: fehlender, fremder oder kaputter Katalog heißt „kein Eintrag“. Die Sets brauchen ihn nur für die Art-Prüfung,
-  // er ist abgeleitet und löschbar (Review S1 MAJOR 1). /stoebern meldet den Zustand selbst als 503.
-  private katalogEintrag(mid: string): Zeile | null {
-    try { return this.katalog.vorhanden() ? this.katalog.eintragMid(mid) : null; }
-    catch (e) { if (e instanceof KatalogFehler) return null; throw e; }
-  }
-
-  // Typ eines Postens für die Art-Prüfung: aus dem Katalog, ohne Katalog (fehlt, fremd, im Neubau) aus der Mediathek selbst
-  // (Review S2b Befund 1). null = unbekannt; dann gibt es nichts abzuweisen.
-  private postenTyp(mid: string): string | null {
-    const k = this.katalogEintrag(mid);
-    if (k) return k.typ;
-    try { return this.mediathek.vorhanden() ? (this.mediathek.felder([mid], new Set()).get(mid)?.typ ?? null) : null; }
-    catch (e) { if (e instanceof MediathekFehler) return null; throw e; }
-  }
-
-  private async vorhoerenAus(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    try {
-      if (d.aktion === 'stopp') { this.vorhoeren.stoppe(); return this.json(a, 200, { ok: true }); }
-      if (d.aktion === 'springe') { this.vorhoeren.springe(Number(d.richtung) < 0 ? -1 : 1); return this.json(a, 200, { ok: true }); }
-      // sha (Browser-Zeile) oder mid (Listen-Zeilen tragen bei Tracks nur material_id; Review S7 m3), wie /stoebern/detail
-      const z = typeof d.sha === 'string' && d.sha ? this.katalog.eintrag(d.sha) : this.katalog.eintragVonMid(String(d.mid ?? ''));
-      if (!z) throw new KatalogFehler(404, 'unbekannt');
-      if (z.schutz === 'ableton') throw new KatalogFehler(409, 'nur_live');
-      if (!z.pfad || !fs.existsSync(z.pfad)) throw new KatalogFehler(409, 'datei_fehlt');
-      await this.vorhoeren.spiele({ pfad: z.pfad, typ: z.typ, sha: z.sha, bpm: z.bpm });
-      this.json(a, 200, { ok: true, ...(await this.vorhoeren.stand()) });
-    } catch (e) {
-      if (e instanceof VorhoerFehler) return this.json(a, e.code, { fehler: e.fehler });
-      this.katalogFehler(e, a);
-    }
-  }
-
-  private katalogFehler(e: unknown, a: http.ServerResponse): void {
-    if (e instanceof KatalogFehler || e instanceof MediathekFehler) return this.json(a, e.code, { fehler: e.fehler });
-    this.opt.log?.({ typ: 'katalog_fehler', text: (e as Error).message });
-    this.json(a, 500, { fehler: 'katalog_abfrage', text: (e as Error).message });
-  }
-
-  // Sets (Plan 2026-10-03-sets-mit-tracks). Kein Kern-Befehl; Dateien unter opt.sammlungen.
-  private async sammlungRoute(q: http.IncomingMessage, url: URL, a: http.ServerResponse): Promise<void> {
-    try {   // fremdePost für POST: Router (Task 9)
-      if (url.pathname === '/sammlungen') {
-        if (q.method === 'GET') return this.json(a, 200, this.sammlungen.liste(url.searchParams.get('art') ?? undefined));
-        if (q.method === 'POST') { const d = await this.koerper(q); return this.json(a, 201, { slug: this.sammlungen.lege(String(d.name ?? ''), [], String(d.art ?? 'set')) }); }
-      }
-      if (url.pathname === '/sammlungen/import' && q.method === 'POST') {
-        const d = await this.koerper(q);
-        const art = String(d.art ?? 'set');
-        if (art !== 'set' && art !== 'playlist') return this.json(a, 400, { fehler: 'art_unbekannt' });   // Traktor-Listen sind Tracks
-        const l = this.mediathek.listeMids(Number(d.liste_id));
-        const slug = this.sammlungen.lege(l.name, l.mids.map((m, i) => ({ id: `p${i + 1}`, art: 'track' as const, material_id: m })), art);
-        return this.json(a, 201, { slug, posten: l.mids.length });
-      }
-      const m = url.pathname.match(/^\/sammlungen\/([^/]+)(\/posten|\/posten\/entfernen|\/posten\/verschieben|\/umbenennen|\/vorbereiten|\/loeschen)?$/);
-      if (!m) return this.json(a, 404, { fehler: 'nicht_gefunden' });
-      const slug = decodeURIComponent(m[1]), was = m[2] ?? '';
-      if (q.method === 'GET' && was === '') return this.json(a, 200, await this.sammlungAnsicht(slug));
-      if (q.method === 'POST' && was === '/posten') {
-        const d = await this.koerper(q);
-        // Ein Loop/Sample darf nie als Track ins Set (sonst schickt PREPARE ALL ihn in die Werkstatt; Review M6)
-        const art = String(d.art ?? ''), ref = String(art === 'muster' ? d.ref ?? '' : d.material_id ?? '');
-        if (art !== 'muster') {
-          const typ = this.postenTyp(ref);
-          if (typ !== null && typ !== art && (art === 'track' || typ === 'track')) return this.json(a, 400, { fehler: 'art_passt_nicht' });
-        }
-        const r = await this.wiederhole(() => this.sammlungen.legeHinzu(slug, art, ref, typeof d.notiz === 'string' ? d.notiz : undefined));
-        return this.json(a, r.schon_drin ? 200 : 201, r.schon_drin ? r : { id: r.id });
-      }
-      if (q.method === 'POST' && was === '/posten/entfernen') { const d = await this.koerper(q); await this.wiederhole(() => this.sammlungen.entferne(slug, String(d.id ?? ''))); return this.json(a, 200, { ok: true }); }
-      if (q.method === 'POST' && was === '/posten/verschieben') { const d = await this.koerper(q); await this.wiederhole(() => this.sammlungen.verschiebe(slug, String(d.id ?? ''), Number(d.nach))); return this.json(a, 200, { ok: true }); }
-      if (q.method === 'POST' && was === '/umbenennen') { const d = await this.koerper(q); await this.wiederhole(() => this.sammlungen.benenne(slug, String(d.name ?? ''))); return this.json(a, 200, { ok: true }); }
-      if (q.method === 'POST' && was === '/vorbereiten') {
-        const ansicht = await this.sammlungAnsicht(slug) as { posten: { art: string; material_id: string; status: string }[] };
-        return this.json(a, 202, { eingereiht: this.reihe(ansicht.posten.filter((p) => p.art === 'track' && p.status === 'prepare').map((p) => p.material_id)) });
-      }
-      if (q.method === 'POST' && was === '/loeschen') { this.sammlungen.loesche(slug); return this.json(a, 200, { ok: true }); }
-      return this.json(a, 404, { fehler: 'nicht_gefunden' });
-    } catch (e) {
-      if (e instanceof SammlungFehler) return this.json(a, e.code, { fehler: e.fehler });
-      this.mediathekFehler(e, a);
-    }
-  }
+  private stoebernFilter(...a: Parameters<typeof ST.stoebernFilter>) { return ST.stoebernFilter.call(this, ...a); }
+  private stoebernTreffer(...a: Parameters<typeof ST.stoebernTreffer>) { return ST.stoebernTreffer.call(this, ...a); }
+  private katalogEintrag(...a: Parameters<typeof ST.katalogEintrag>) { return ST.katalogEintrag.call(this, ...a); }
+  private postenTyp(...a: Parameters<typeof ST.postenTyp>) { return ST.postenTyp.call(this, ...a); }
+  private vorhoerenAus(...a: Parameters<typeof ST.vorhoerenAus>) { return ST.vorhoerenAus.call(this, ...a); }
+  private katalogFehler(...a: Parameters<typeof ST.katalogFehler>) { return ST.katalogFehler.call(this, ...a); }
+  private sammlungRoute(...a: Parameters<typeof ST.sammlungRoute>) { return ST.sammlungRoute.call(this, ...a); }
 
   // Eine von einem Fremdprozess belegte Liste (409 liste_busy, lock.ts): bis zu 4 mal nach 25 ms asynchron wiederholen, nie blockieren
   private async wiederhole<T>(f: () => T): Promise<T> {
@@ -3998,126 +769,14 @@ export class Oberflaeche {
     }
   }
 
-  private async sammlungAnsicht(slug: string): Promise<Record<string, unknown>> {
-    const s = this.sammlungen.lies(slug);
-    const bestand = bestandIds(this.opt.bestand);
-    const mids = s.posten.filter((p) => p.art === 'track').map((p) => p.material_id as string);
-    const felder = this.mediathek.vorhanden() ? this.mediathek.felder(mids, bestand) : new Map();
-    const muster = s.posten.some((p) => p.art === 'muster') ? await this.muster.liste() : [];
-    const posten = s.posten.map((p) => {
-      if (p.art === 'muster') {
-        const e = muster.find((m) => m.id === p.ref);
-        return { ...p, titel: e?.name ?? p.ref ?? null, rolle: e?.rolle ?? null, bpm: e?.bpm ?? null, status: e ? 'ready' : 'missing',
-          eintrag: e ? { typ: 'strudel', ...e } : { typ: 'strudel', id: p.ref, name: p.ref, quelle: null, rolle: null, bpm: null, takte: null, text: '', ladbar: false } };
-      }
-      if (p.art !== 'track') {
-        const z = this.katalogEintrag(p.material_id ?? '');
-        return { ...p, titel: z?.name ?? null, kuenstler: null, mix: null, bpm: z?.bpm ?? null, camelot: z?.camelot ?? null, energie: null,
-          genre: null, dauer_s: z?.dauer_s ?? null, status: z?.pfad && fs.existsSync(z.pfad) ? 'ready' : 'missing', laden_mid: null,
-          eintrag: z ? this.stoebernTreffer(z, new Set()) : { typ: p.art, material_id: p.material_id, name: null, pfad_da: false, nur_live: false } };
-      }
-      const k = this.katalogEintrag(p.material_id as string);
-      if (k && k.typ !== 'track') return { ...p, titel: k.name, kuenstler: null, mix: null, bpm: k.bpm, camelot: k.camelot, energie: null,
-        genre: null, dauer_s: k.dauer_s, status: 'kein_track', laden_mid: null, eintrag: this.stoebernTreffer(k, new Set()) };
-      // Without the media library (another machine) the own catalog tells what the track is: same fields, a track whose file is there is 'prepare'
-      const f = felder.get(p.material_id as string) ?? (k ? { titel: k.titel ?? k.name, kuenstler: k.kuenstler, mix: k.mix, bpm: k.bpm, camelot: k.camelot,
-        energie: k.energie, genre: k.genre, dauer_s: k.dauer_s, bestand_mid: null, pfad_da: !!k.pfad && fs.existsSync(k.pfad) } : undefined);
-      const lauf = this.vorbereiter.stand(p.material_id);
-      let status = 'unbekannt', laden: string | null = null, grund: string | undefined, grundStufe: string | undefined;
-      if (f?.bestand_mid) { status = 'ready'; laden = f.bestand_mid; }
-      else if (bestand.has(p.material_id)) { status = 'ready'; laden = p.material_id; }
-      else if (lauf?.status === 'laeuft') status = 'laeuft';
-      else if (this.warteschlange.includes(p.material_id)) status = 'wartet';
-      else if (lauf?.status === 'fehler') { status = 'fehler'; grund = lauf.grund; grundStufe = lauf.name; }
-      else if (f) status = f.pfad_da ? 'prepare' : 'missing';
-      return { ...p, titel: f?.titel ?? null, kuenstler: f?.kuenstler ?? null, mix: f?.mix ?? null, bpm: f?.bpm ?? null, camelot: f?.camelot ?? null, energie: f?.energie ?? null,
-        genre: f?.genre ?? null, dauer_s: f?.dauer_s ?? null, status, laden_mid: laden, ...(grund ? { grund, ...(grundStufe ? { grund_stufe: grundStufe } : {}) } : {}),
-        eintrag: { typ: 'track', material_id: p.material_id, titel: f?.titel ?? null, kuenstler: f?.kuenstler ?? null, mix: f?.mix ?? null, bpm: f?.bpm ?? null, camelot: f?.camelot ?? null,
-          energie: f?.energie ?? null, genre: f?.genre ?? null, dauer_s: f?.dauer_s ?? null, status, laden_mid: laden, pfad_da: f?.pfad_da ?? false } };
-    });
-    return { slug, name: s.name, art: s.art ?? 'set', notiz: s.notiz, posten, uebersicht: uebersicht(posten.filter((p) => p.art === 'track')) };
-  }
+  private sammlungAnsicht(...a: Parameters<typeof ST.sammlungAnsicht>) { return ST.sammlungAnsicht.call(this, ...a); }
 
   private pumpeTimer: NodeJS.Timeout | null = null;
-  // „Alles vorbereiten": Warteschlange vor dem Vorbereiter (der nimmt höchstens zwei zugleich, sonst 'ausgelastet').
-  private reihe(mids: string[]): number {
-    let n = 0;
-    for (const m of mids) if (!this.warteschlange.includes(m) && this.vorbereiter.stand(m)?.status !== 'laeuft') { this.warteschlange.push(m); n++; }
-    this.pumpe();
-    return n;
-  }
-  private pumpe(): void {
-    if (this.pumpeTimer) { clearTimeout(this.pumpeTimer); this.pumpeTimer = null; }
-    if (this.gestoppt) return;
-    while (this.warteschlange.length) {
-      const mid = this.warteschlange[0];
-      let q;
-      try { q = vorbereitQuelle(this.mediathek, this.katalog, mid, bestandIds(this.opt.bestand)); }
-      catch (e) { this.opt.log?.({ typ: 'set_vorbereiten_uebersprungen', material_id: mid, fehler: (e as Error).message }); this.warteschlange.shift(); continue; }
-      if (q.vorhanden !== undefined) { this.warteschlange.shift(); continue; }
-      if (this.vorbereiter.starte(mid, q.pfad, q.titel) === 'ausgelastet') break;
-      this.warteschlange.shift();
-    }
-    if (this.warteschlange.length) this.pumpeTimer = setTimeout(() => this.pumpe(), 2000);
-  }
-
-  private vorbereitenStand(url: URL, a: http.ServerResponse): void {
-    const mid = url.searchParams.get('material_id') ?? '';
-    const st = this.vorbereiter.stand(mid);
-    if (st) return this.json(a, 200, st);
-    if (bestandIds(this.opt.bestand).has(mid)) return this.json(a, 200, { status: 'vorhanden' });
-    this.json(a, 404, { fehler: 'unbekannt' });
-  }
-
-  private async vorbereiten(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    try {
-      const mid = typeof d.material_id === 'string' ? d.material_id : '';
-      const imBestand = bestandIds(this.opt.bestand);
-      if (imBestand.has(mid)) return this.json(a, 200, { material_id: mid, status: 'vorhanden' });
-      const q = vorbereitQuelle(this.mediathek, this.katalog, mid, imBestand);   // 400 / 404 / 409 datei_fehlt / 503 mediathek_fehlt; ohne Mediathek aus dem eigenen Katalog
-      if (q.vorhanden !== undefined) return this.json(a, 200, { material_id: q.vorhanden, status: 'vorhanden' });   // anderes Objekt desselben Werks liegt schon im Bestand
-      const r = this.vorbereiter.starte(mid, q.pfad, q.titel);
-      if (r === 'ausgelastet') return this.json(a, 429, { fehler: 'ausgelastet' });
-      if (r === 'gestartet') this.opt.log?.({ typ: 'vorbereiten', material_id: mid, quelle: q.pfad });
-      this.json(a, 202, { material_id: mid, status: 'laeuft' });
-    } catch (e) { this.mediathekFehler(e, a); }
-  }
-
-  // Laden: Eintrag aus dem Index, dann Kopie in den Arbeitsbestand (geprüft), erst dann /k/deck/laden.
-  private async laden(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const deck = d.deck;
-    // Ohne genannte Fassung die neueste derselben Basis: der Index ist nach Fassung aufsteigend sortiert, ein find()
-    // nahm r1 und ließ jede Korrektur (r2, r3 … aus `korrigieren`) liegen (gemessen 2026-10-09, Phase-Korrektur).
-    const passend = leseBestand(this.opt.bestand).filter((e) => e.material_id === d.material_id
-      && e.fassung === (d.fassung ?? e.fassung) && e.basis_bpm === (d.basis_bpm ?? e.basis_bpm));
-    const eintrag = passend.filter((e) => e.basis_bpm === passend[0].basis_bpm)
-      .reduce<typeof passend[number] | undefined>((m, e) => (m === undefined || e.fassung > m.fassung ? e : m), undefined);
-    if (!istOffenesDeck(deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck', deck });
-    // Plan seq-fader-frei D4: a part of Cypher that still acts on deck/N/fader|trim (opened under the empty-deck exemption)
-    // must not meet a track Cypher loads now
-    if (this.quelle() === 'cypher' && this.seqRampeLaeuft(deck)) {
-      return this.json(a, 409, { fehler: 'kanal_offen', kanal: `deck/${deck}`,
-        text: `a ramp of Cypher is still acting on deck/${deck} of a SEQ deck place; wait until it has ended before a track is loaded there` });
-    }
-    // Befund 4: nicht im Index ist ein anderer Fall als eine fehlende Datei der Fassung (material_fehlt aus der Kopie)
-    if (!eintrag) return this.json(a, 400, { fehler: 'nicht_im_index', material_id: d.material_id });
-    let kopie;
-    try {
-      kopie = await inArbeitsbestand(this.opt.bestand, this.opt.arbeitsbestand, eintrag.material_id, eintrag.basis_bpm, eintrag.fassung);
-    } catch (e) {
-      const code = e instanceof KopieFehler ? e.code : 'pruefung';
-      this.opt.log?.({ typ: 'kopie_abgewiesen', material_id: eintrag.material_id, fehler: code, text: (e as Error).message });
-      return this.json(a, 400, { fehler: code, material_id: eintrag.material_id, text: (e as Error).message });
-    }
-    this.opt.log?.({ typ: 'kopie', material_id: eintrag.material_id, kopiert: kopie.kopiert, bytes: kopie.bytes, dauer_ms: kopie.dauer_ms });
-    const id = Number(++this.id);
-    const felder = { id, quelle: this.quelle(), deck, material_id: eintrag.material_id, basis_bpm: eintrag.basis_bpm,
-      fassung: eintrag.fassung, mit_stems: kopie.mit_stems };
-    this.kern.sende('/k/deck/laden', felder);
-    this.gesendet++;
-    this.json(a, 200, { ok: true, gesendet: '/k/deck/laden', felder,
-      kopie: { kopiert: kopie.kopiert, bytes: kopie.bytes, dauer_ms: kopie.dauer_ms } });
-  }
+  private reihe(...a: Parameters<typeof ST.reihe>) { return ST.reihe.call(this, ...a); }
+  private pumpe(...a: Parameters<typeof ST.pumpe>) { return ST.pumpe.call(this, ...a); }
+  private vorbereitenStand(...a: Parameters<typeof ST.vorbereitenStand>) { return ST.vorbereitenStand.call(this, ...a); }
+  private vorbereiten(...a: Parameters<typeof ST.vorbereiten>) { return ST.vorbereiten.call(this, ...a); }
+  private laden(...a: Parameters<typeof ST.laden>) { return ST.laden.call(this, ...a); }
 
   // Paket 2 Slice 5 (F07): Der Neustart-Zustand des Kerns trägt Decks und Regler, aber keine Loop-Boxen und keine
   // FX-Einheiten. Der Server merkt sie VOR dem Leeren (B15) und schickt sie 500 ms später erneut, jedes Stück mit der
@@ -4128,273 +787,30 @@ export class Oberflaeche {
   private readonly angefasst = new Set<string>();   // seit dem letzten Plan neu gesetzt: fx:E, graph:K
   private letzteBoxFxWieder = 0;
   private static readonly BOX_FX_SPERRE_MS = 30_000;
-  private boxFxSchnappschuss(): Wiederplan | null {
-    const fx: { einheit: 1 | 2; felder: Felder; zuweisung: string[]; besitzer: string }[] = [];
-    for (const e of [1, 2] as const) {
-      const f = this.stand.fx[e - 1];
-      const zu = Object.entries(this.stand.fxZuweisung[e - 1]).filter(([, an]) => an).map(([kanal]) => kanal);
-      if (!f) continue;   // never set: nothing to bring back (a unit that is off keeps its kind, beats and parameters)
-      fx.push({ einheit: e, felder: f, zuweisung: zu, besitzer: this.fxVon(e) ?? 'cypher' });
-    }
-    // FX3 (the remix insert on fx/3): only its assignments live in the page server's state; the graph on fx/3 is in the graph plan below
-    const zu3 = Object.entries(this.stand.fxZuweisung[2]).filter(([, an]) => an).map(([kanal]) => kanal);
-    const fx3 = zu3.length > 0 ? { zuweisung: zu3, besitzer: this.fxVon(3) ?? 'cypher' } : null;
-    // channels of the open project's sound snapshot belong to the project restore (session.ts nachNeustart sends its knobs and graphs itself)
-    const projektKanaele = (this.proj?.zugang.offen()?.projekt.baukasten ?? []).map((e) => bkDefVonId(e.id)?.kanal ?? '');
-    const graphen = graphenNachNeustart(this.stand.graphen_geladen, this.graphBesitzer, projektKanaele);
-    // t_7f487235: an empty snapshot (the stand was cleared by a restart that was too fast) falls back to the plan that is still waiting
-    const leer = fx.length === 0 && fx3 === null && graphen.length === 0;
-    if (leer && !this.offenerPlan) return null;
-    return leer ? this.offenerPlan! : { fx, fx3, graphen };
-  }
-  // Plan the restore of the snapshot (taken before the stand was cleared); without an argument the snapshot is taken now
-  private boxFxPlanen(vorab?: Wiederplan | null): void {
-    const plan = vorab === undefined ? this.boxFxSchnappschuss() : vorab;
-    if (!plan) return;
-    const jetzt = Date.now();
-    if (jetzt - this.letzteBoxFxWieder < Oberflaeche.BOX_FX_SPERRE_MS) {
-      // Keep the plan and restore it once when the guard time is over (a later restart replaces the wait, so one accepted restart sends once)
-      this.offenerPlan = plan;
-      this.angefasst.clear();   // marks gathered from here on (box, FX, graph set during the wait) keep that part out of the delayed replay; the echoes of earlier restores drop out here (audit C01)
-      this.planNachholen(Oberflaeche.BOX_FX_SPERRE_MS - (jetzt - this.letzteBoxFxWieder) + 500);
-      this.merkeNeustartStand();   // the wait is on disk too
-      this.opt.log?.({ typ: 'wiederherstellung_uebersprungen', grund: 'zu_schnell', seit_ms: jetzt - this.letzteBoxFxWieder });
-      this.verteile({ a: 'wiederherstellung', f: { uebersprungen: true, grund: 'zu_schnell' } });
-      return;
-    }
-    if (this.offenerPlanTimer) { clearTimeout(this.offenerPlanTimer); this.offenerPlanTimer = null; }
-    this.offenerPlan = null;
-    this.letzteBoxFxWieder = jetzt;
-    this.angefasst.clear();
-    const geplant = this.generation;   // MINOR-2: ist der Kern bis zum Auslösen ein anderer geworden, verpufft der Plan
-    if (this.wiederTimer) clearTimeout(this.wiederTimer);
-    this.wiederTimer = setTimeout(() => {
-      this.wiederTimer = null;
-      if (this.generation !== geplant) { this.offenerPlan = plan; this.opt.log?.({ typ: 'wiederherstellung_verworfen', geplant, jetzt: this.generation }); return; }   // kept for the next restart
-      this.boxFxWieder(plan.fx, plan.fx3);
-      this.graphWieder(plan.graphen);
-      this.sichereNeustartStandSofort();   // the file was held back during the 500 ms, and still holds the old generation
-    }, 500);
-  }
-  // The delayed restore of offenerPlan once, warteMs from now (the guard time is over then); another restart takes it over
-  private planNachholen(warteMs: number): void {
-    const gen = this.generation;
-    this.offenerPlanFaellig = Date.now() + warteMs;
-    if (this.offenerPlanTimer) clearTimeout(this.offenerPlanTimer);
-    this.offenerPlanTimer = setTimeout(() => {
-      this.offenerPlanTimer = null;
-      if (this.generation !== gen || !this.offenerPlan) return;   // another restart took over: its own pass decides
-      const p = this.offenerPlan;
-      this.offenerPlan = null;
-      this.letzteBoxFxWieder = Date.now();
-      this.opt.log?.({ typ: 'wiederherstellung_nachgeholt' });
-      this.boxFxWieder(p.fx, p.fx3);
-      this.graphWieder(p.graphen);
-      this.sichereNeustartStandSofort();   // the plan is done
-    }, warteMs);
-    this.offenerPlanTimer.unref?.();
-  }
+  private boxFxSchnappschuss(...a: Parameters<typeof NS.boxFxSchnappschuss>) { return NS.boxFxSchnappschuss.call(this, ...a); }
+  private boxFxPlanen(...a: Parameters<typeof NS.boxFxPlanen>) { return NS.boxFxPlanen.call(this, ...a); }
+  private planNachholen(...a: Parameters<typeof NS.planNachholen>) { return NS.planNachholen.call(this, ...a); }
   // per deck: length taps waiting for the core's answer
   private loopLaengeTasten?: Record<string, { sicher: number; tippen: number; offen: number; kette: Promise<void> }>;
   private offenerPlanFaellig = 0;   // epoch ms the waiting plan is due
   // The snapshot of a first contact with a higher generation, until /k/willkommen AND /e/neustart of that generation said their samples
   private planWartet: { generation: number; plan: Wiederplan | null; willkommen?: number; neustart?: number } | null = null;
-  private planWartetFuehren(adresse: string, generation: number, sample: number): void {
-    const w = this.planWartet;
-    if (!w || (adresse !== '/k/willkommen' && adresse !== '/e/neustart')) return;
-    if (generation !== w.generation) { this.planWartet = null; return; }   // another kern life took over: its own pass decides
-    if (!Number.isFinite(sample)) return;
-    if (adresse === '/k/willkommen') w.willkommen ??= sample;
-    else if (adresse === '/e/neustart') w.neustart ??= sample;
-    if (w.willkommen === undefined || w.neustart === undefined) return;
-    this.planWartet = null;
-    const dauer = w.willkommen - w.neustart;   // frames the kern has run since it restarted
-    if (dauer < NEUSTART_FRISCH_FRAMES) { this.boxFxPlanen(w.plan); return; }
-    this.offenerPlan = null;   // adopted from the file, but not the plan of this kern
-    this.opt.log?.({ typ: 'wiederherstellung_uebersprungen', grund: 'kern_laenger_neu', dauer_frames: dauer });
-  }
+  private planWartetFuehren(...a: Parameters<typeof NS.planWartetFuehren>) { return NS.planWartetFuehren.call(this, ...a); }
   private wiederTimer: ReturnType<typeof setTimeout> | null = null;   // the restore 500 ms after an accepted restart (cleared by stoppe)
   private offenerPlan: Wiederplan | null = null;   // t_7f487235: plan held back by the guard
   private offenerPlanTimer: ReturnType<typeof setTimeout> | null = null;
-  private boxFxWieder(
-    fx: { einheit: 1 | 2; felder: Felder; zuweisung: string[]; besitzer: string }[],
-    fx3: { zuweisung: string[]; besitzer: string } | null): void {
-    const nichtCypher = (besitzer: string) => !(besitzer === 'cypher' && this.kiGestoppt);   // Stop Cypher: Cyphers Teile bleiben weg
-    const autoAus = !leseMusterStand(this.musterOrdner()).autonom;   // F7: wie fxRiegel, zum Zeitpunkt des Auslösens
-    let n = 0;
-    for (const u of fx) {
-      if (!nichtCypher(u.besitzer)) { this.opt.log?.({ typ: 'fx_wieder_ausgelassen', einheit: u.einheit, grund: 'ki_gestoppt' }); continue; }
-      if (u.besitzer === 'cypher' && autoAus) { this.opt.log?.({ typ: 'fx_wieder_ausgelassen', einheit: u.einheit, grund: 'auto_aus' }); continue; }
-      if (this.angefasst.has(`fx:${u.einheit}`)) { this.opt.log?.({ typ: 'fx_wieder_ausgelassen', einheit: u.einheit, grund: 'neu_gesetzt' }); continue; }
-      const f = u.felder;
-      this.kern.sende('/k/fx', { id: Number(++this.id), quelle: u.besitzer, einheit: u.einheit, art: f.art, beats: f.beats, wet: f.wet,
-        param1: f.param1, param2: f.param2, param3: f.param3, an: f.an });
-      this.gesendet++;
-      for (const kanal of u.zuweisung) {
-        this.kern.sende('/k/fx/zuweisung', { id: Number(++this.id), quelle: u.besitzer, einheit: u.einheit, kanal, an: 1 });
-        this.gesendet++;
-      }
-      this.opt.log?.({ typ: 'fx_wieder', einheit: u.einheit, besitzer: u.besitzer, an: f.an === 1 ? 1 : 0, zuweisungen: u.zuweisung.length });   // fx_von.json bleibt: hier wird nicht fxVon(…, von) gerufen
-      n++;
-    }
-    if (fx3 !== null) {   // AUTO off does not hold FX3 back: an assignment sounds only with a graph on fx/3, nothing runs out by itself
-      if (!nichtCypher(fx3.besitzer)) this.opt.log?.({ typ: 'fx_wieder_ausgelassen', einheit: 3, grund: 'ki_gestoppt' });
-      else if (this.angefasst.has('fx:3')) this.opt.log?.({ typ: 'fx_wieder_ausgelassen', einheit: 3, grund: 'neu_gesetzt' });
-      else {
-        for (const kanal of fx3.zuweisung) {
-          this.kern.sende('/k/fx/zuweisung', { id: Number(++this.id), quelle: fx3.besitzer, einheit: 3, kanal, an: 1 });
-          this.gesendet++;
-        }
-        this.opt.log?.({ typ: 'fx_wieder', einheit: 3, besitzer: fx3.besitzer, zuweisungen: fx3.zuweisung.length });
-        n++;
-      }
-    }
-    this.opt.log?.({ typ: 'wiederherstellung', stuecke: n });
-  }
-  // Kanban t_e998388c: load the graphs of the plan again. No default rows (vorgaben false): the knob rows are in the kern's restart state and the kern
-  // hands them to the graph when it attaches. Stop Cypher keeps Cypher's graphs away (B12, like boxes and FX); AUTO off does not, because a silent
-  // stream that Andreas holds would be worse than the graph he was hearing.
-  private graphWieder(graphen: { kanal: string; name: string; besitzer: string }[]): void {
-    for (const g of graphen) {
-      const aus = (grund: string) => this.opt.log?.({ typ: 'graph_wieder_ausgelassen', kanal: g.kanal, name: g.name, grund });
-      if (g.besitzer === 'cypher' && this.kiGestoppt) { aus('ki_gestoppt'); continue; }
-      if (this.angefasst.has(`graph:${g.kanal}`) || (this.stand.graphen_geladen[g.kanal] ?? '') !== '') { aus('neu_gesetzt'); continue; }
-      void this.graphSetzen({ kanal: g.kanal, name: g.name, vorgaben: false }, g.besitzer, { wieder: true }).then((r) => {
-        if (r.code !== 200) { aus(String(r.j.fehler ?? r.code)); return; }
-        const q = r.j.quittung as { status?: number } | null | undefined;
-        this.opt.log?.({ typ: 'graph_wieder', kanal: g.kanal, name: g.name, besitzer: g.besitzer, status: q?.status ?? null });
-      }).catch((e) => aus((e as Error).message));
-    }
-  }
-  private loopOrdner(): string { return this.opt.loops ?? loopOrdnerVorgabe(instanz()); }
-
-  // Loop actions of the page server: rec and kit. Loading and starting loops is the loop deck (container core).
-  private loop(d: Record<string, unknown>, a: http.ServerResponse): void | Promise<void> {
-    const { aktion } = d;
-    if (aktion === 'rec') return this.loopRec(d, a);  // MVP 2 Scheibe 2: kein box-Feld, eigener Zweig
-    if (aktion === 'kit') return this.loopKit(d, a);  // MVP 2 Scheibe 3: → STRUDEL, nur Dateien, kein Kern
-    return this.json(a, 400, { fehler: 'unbekannte_aktion', aktion });   // container core: the loop boxes are gone, loading is the loop deck
-  }
-
-  // Plan Tempo-Folge (§4.2 /k/tempo/rampe): das Master-Tempo fährt ab der nächsten Takt-Eins über einen Takt auf bpm
-  // (60 bis 200, auf 0,01 gerundet). Andreas und Cypher; bei Stop Cypher lehnt die Seite Cypher mit 409 ki_gestoppt ab. Laufende Decks
-  // folgen im Varispeed (Welle 3, ADR 028); die Antwort trägt die Quittung.
-  private async tempo(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    // Andreas 2026-10-05: „du willst ernsthaft das ich dir 138 bpm vortippe?“ – Tempo ist auch Cyphers Hand; Stop Cypher hält es.
-    if (this.quelle() === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
-    // D1 Spec 6.32: eine Tempo-Rampe verändert eine laufende Freeze-Datei; während der Sperre des Bereichs proj (S3) nimmt die Route nichts an
-    if (this.proj.sitzung.ladenGesperrt()) return this.json(a, 409, { fehler: 'beschaeftigt', text: 'a freeze is running; tempo changes wait until it is done' });
-    const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
-    const rampe = tempoRampe(u?.beat ?? 0, u?.bpm ?? 128, d.bpm as number, this.proTakt());   // D1 S2: derselbe Weg wie der Bereich proj (Spec 2.7)
-    if (!rampe) return this.json(a, 400, { fehler: 'bereich', text: 'bpm must be a number from 60 to 200' });
-    const felder = { id: Number(++this.id), quelle: this.quelle(), ...rampe };
-    this.kern.sende('/k/tempo/rampe', felder);
-    this.gesendet++;
-    const quittung = await this.warteQuittung(felder.id, felder.ab_beat);
-    this.json(a, 200, { ok: true, gesendet: '/k/tempo/rampe', felder, quittung });
-  }
-
-  // MVP 2 Scheibe 2/3 (§4.9 /k/loop/rec): REC auf C. beats 1, 2, 4, 8, 16 oder 32; Name nur syntaktisch geprüft (ob er schon
-  // vergeben ist, weiß erst der Kern nach der Aufnahme: /e/mitschnitt Status 1).
-  // Plan djk-hand-mcp-studio (Review): die Antwort wartet auf die Kern-Quittung (wie /regler), damit Status 6 (Stop Cypher ki_gestoppt,
-  // ueberlappung, eine Tempo-Rampe im Mitschnittfenster; jedes feste Tempo ist erlaubt, core.cpp:196) beim Aufrufer ankommt statt still zu verpuffen.
-  private async loopRec(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const beats = d.beats;
-    const name = d.name;
-    if (![1, 2, 4, 8, 16, 32].includes(beats as number)) return this.json(a, 400, { fehler: 'unbekannte_beats', beats });
-    if (typeof name !== 'string' || !LOOP_NAME.test(name)) return this.json(a, 400, { fehler: 'unbekannter_name', name });
-    const summe = d.summe === undefined ? 0 : d.summe === true || d.summe === 1 ? 1 : d.summe === false || d.summe === 0 ? 0 : -1;
-    if (summe < 0) return this.json(a, 400, { fehler: 'unbekannte_summe', summe: d.summe });   // 1: Strudel sum erz/1+2+3 instead of erz/1
-    const felder: Felder = { id: Number(++this.id), quelle: this.quelle(), beats: beats as number, name, summe };
-    this.kern.sende('/k/loop/rec', felder);
-    this.gesendet++;
-    this.json(a, 200, { ok: true, gesendet: '/k/loop/rec', felder, quittung: await this.warteQuittung(felder.id) });
-  }
-  // pad/<n> as the module gate sees it (export, modul_einsetzen, modul_setzen): the rows say open, or a ramp of Cypher on trim or fader is planned or running
-  private kanalGeoeffnet(kanal: string): boolean {
-    return kanalOffen(this.stand.regler, kanal) || this.kanalFaehrt(kanal);
-  }
-  // a planned or running ramp of Cypher on fader or trim of a container strip (fahrtEnde holds Cypher's parts only)
-  private kanalFaehrt(kanal: string): boolean {
-    const beat = this.kern.uhr?.beat ?? 0;
-    for (const [pfad, l] of this.fahrtEnde) if ((pfad === `${kanal}/fader` || pfad === `${kanal}/trim`) && l.some((e) => e.ab + e.dauer >= beat)) return true;
-    return false;
-  }
-  // MVP 2 Scheibe 3 (E2): Loop wird Klang im Zusatz-Kit (rec, Prüfinstanz rec-<i>); der Erzeuger lädt ihn nach.
-  private loopKit(d: Record<string, unknown>, a: http.ServerResponse): void {
-    const name = d.name;
-    if (typeof name !== 'string' || !LOOP_NAME.test(name)) return this.json(a, 400, { fehler: 'unbekannter_loop', name });
-    if (d.klang !== undefined && typeof d.klang !== 'string') return this.json(a, 400, { fehler: 'unbekannter_klang' });
-    // Riegel für Cypher: der Zusatz-Kit rec hängt am Drums-Erzeuger (Strom 1); Stop Cypher und AUTO aus gelten auch hier
-    if (this.quelle() === 'cypher') {
-      if (this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
-      if (!leseMusterStand(this.musterOrdner(1)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: 1, text: 'AUTO is off for the drums instance: Andreas holds it' });
-    }
-    try {
-      const r = loopZuKlang({ loopOrdner: this.loopOrdner(), kitsOrdner: this.opt.kits ?? kitsOrdnerVorgabe(),
-        basis: this.opt.kit ?? 'battery', zusatz: zusatzKit(), loop: name, klang: d.klang as string | undefined });
-      this.json(a, 200, { ok: true, ...r });
-    } catch (e) {
-      this.json(a, 400, { fehler: 'kit', text: (e as Error).message });
-    }
-  }
-
-  // Plan Oberfläche T2 (Spec E4): ?loop=<name> oder ?material=<id>&bpm=<basis>&fassung=<n>. Liest nur, sendet nichts an den Kern.
-  private async welleAus(url: URL, a: http.ServerResponse): Promise<void> {
-    try {
-      const loop = url.searchParams.get('loop'), material = url.searchParams.get('material'), sha = url.searchParams.get('sha');
-      const schnitt = url.searchParams.get('schnitt');
-      const q = loop !== null ? loopQuelle(this.loopOrdner(), loop)
-        : schnitt !== null ? schnittQuelle(graphenOrdner(), schnitt)   // sampler A1: the cut audio
-        // Browser (S5): der Pfad kommt aus dem Katalog, nie aus der Anfrage. Ableton-geschützte Dateien sind für ffmpeg nicht lesbar (422).
-        : sha !== null ? (() => {
-          // S6 Task 14: Stems und Takes liegen im Projektordner, nicht im Katalog; deren Pfad kommt aus dem offenen Projekt
-          const ausProjekt = () => { const p = this.proj.sitzung.projektQuellPfad(sha); return p ? dateiQuelle(p, sha) : null; };
-          let z;
-          try { z = this.katalog.eintrag(sha); } catch (e) { const q = ausProjekt(); if (q) return q; throw e; }
-          if (!z?.pfad) { const q = ausProjekt(); if (q) return q; throw new WelleFehler(404, 'unbekannt'); }
-          if (z.schutz === 'ableton') throw new WelleFehler(422, 'nur_live');
-          // sha eines unterlegenen Objekts: dessen eigene Datei (Fundort auf diesem Host), nie stillschweigend die des Gewinners
-          const pfad = sha === z.sha ? z.pfad : (this.mediathek.vorhanden() ? this.mediathek.pfadVon(sha) : null);
-          if (!pfad) throw new WelleFehler(404, 'unbekannt');
-          return dateiQuelle(pfad, sha, z.dauer_s);
-        })()
-        : material !== null ? fassungQuelle(this.opt.bestand, material, Number(url.searchParams.get('bpm')), Number(url.searchParams.get('fassung')))
-        : (() => { throw new WelleFehler(400, 'quelle_fehlt'); })();
-      // Schließt die Seite die Anfrage (Auswahl gewechselt), bricht die Dekodierung ab, wenn sonst niemand auf sie wartet (S5-Review B2)
-      const ac = new AbortController();
-      a.on('close', () => { if (!a.writableFinished) ac.abort(); });
-      const datei = await this.welle.hole(q, ac.signal);
-      a.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' });
-      fs.createReadStream(datei).on('error', () => a.destroy()).pipe(a);   // Review F6: Lesefehler beendet nur die Antwort
-    } catch (e) {
-      if (a.destroyed) return;                                   // die Seite ist weg (Abbruch): nichts mehr zu melden
-      const code = e instanceof WelleFehler || e instanceof KatalogFehler ? e.code : 500;
-      this.json(a, code, { fehler: (e as Error).message });
-    }
-  }
-
-  // Plan Oberfläche T5: Raster der Fassung für die Deck-Welle (erster Schlag, erste Eins, Tempo, Länge). Liest nur.
-  private fassungAus(url: URL, a: http.ServerResponse): void {
-    try {
-      const q = fassungQuelle(this.opt.bestand, url.searchParams.get('material') ?? '', Number(url.searchParams.get('bpm')), Number(url.searchParams.get('fassung')));
-      const j = JSON.parse(fs.readFileSync(path.join(path.dirname(q.datei), 'fassung.json'), 'utf8')) as Record<string, unknown>;
-      this.json(a, 200, { erster_schlag_frame: j.erster_schlag_frame, erste_eins_quell_beat: j.erste_eins_quell_beat, basis_bpm: j.basis_bpm, frames: j.frames });
-    } catch (e) {
-      this.json(a, e instanceof WelleFehler ? e.code : 500, { fehler: (e as Error).message });
-    }
-  }
-
-  private datei(pfad: string, a: http.ServerResponse): void {
-    let rel: string;
-    try { rel = pfad === '/' ? 'index.html' : decodeURIComponent(pfad).replace(/^\/+/, ''); } catch { return this.json(a, 400, { fehler: 'pfad', text: 'the path is not valid' }); }
-    const voll = path.resolve(OEFFENTLICH, rel);
-    if (!voll.startsWith(OEFFENTLICH + path.sep) || !fs.existsSync(voll) || !fs.statSync(voll).isFile()) {
-      return this.json(a, 404, { fehler: 'nicht_gefunden' });
-    }
-    a.writeHead(200, { 'content-type': TYPEN[path.extname(voll)] ?? 'application/octet-stream', 'cache-control': 'no-store' });
-    fs.createReadStream(voll).on('error', () => a.destroy()).pipe(a);
-  }
+  private boxFxWieder(...a: Parameters<typeof NS.boxFxWieder>) { return NS.boxFxWieder.call(this, ...a); }
+  private graphWieder(...a: Parameters<typeof NS.graphWieder>) { return NS.graphWieder.call(this, ...a); }
+  private loopOrdner(...a: Parameters<typeof LW.loopOrdner>) { return LW.loopOrdner.call(this, ...a); }
+  private loop(...a: Parameters<typeof LW.loop>) { return LW.loop.call(this, ...a); }
+  private tempo(...a: Parameters<typeof LW.tempo>) { return LW.tempo.call(this, ...a); }
+  private loopRec(...a: Parameters<typeof LW.loopRec>) { return LW.loopRec.call(this, ...a); }
+  private kanalGeoeffnet(...a: Parameters<typeof LW.kanalGeoeffnet>) { return LW.kanalGeoeffnet.call(this, ...a); }
+  private kanalFaehrt(...a: Parameters<typeof LW.kanalFaehrt>) { return LW.kanalFaehrt.call(this, ...a); }
+  private loopKit(...a: Parameters<typeof LW.loopKit>) { return LW.loopKit.call(this, ...a); }
+  private welleAus(...a: Parameters<typeof LW.welleAus>) { return LW.welleAus.call(this, ...a); }
+  private fassungAus(...a: Parameters<typeof LW.fassungAus>) { return LW.fassungAus.call(this, ...a); }
+  private datei(...a: Parameters<typeof LW.datei>) { return LW.datei.call(this, ...a); }
 }
 
 async function main(): Promise<void> {

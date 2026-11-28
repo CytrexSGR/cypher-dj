@@ -185,8 +185,12 @@ export const INSERT = {
     }
     const graph = pool === 'bk' ? bkEffektGraph(a.graph, ctx) : undefined;
     if (pool !== 'bk' && a.graph !== undefined) ab('argument_unbekannt', `graph: only a bk stage has a graph (${art})`);
-    if (pool !== 'komp' && pool !== 'eq' && a.sc !== undefined) ab('argument_unbekannt', `sc: only the compressor and the EQ have a key (${art})`);
-    if (pool !== 'komp' && pool !== 'eq' && a.key !== undefined) ab('argument_unbekannt', `key: only the compressor and the EQ have a key (${art})`);
+    if (pool !== 'komp' && pool !== 'eq' && pool !== 'mb' && a.sc !== undefined) {
+      ab('argument_unbekannt', `sc: only the compressor, the EQ and the multiband have a key (${art})`);
+    }
+    if (pool !== 'komp' && pool !== 'eq' && pool !== 'mb' && a.key !== undefined) {
+      ab('argument_unbekannt', `key: only the compressor, the EQ and the multiband have a key (${art})`);
+    }
     if (a.sc !== undefined && a.key !== undefined && a.key !== null) ab('argument_ungueltig', 'sc and key exclude each other: a stage has one key at most');
     const liste = [...(strang.inserts ?? [])];
     if (ersetzen) {
@@ -222,7 +226,9 @@ export const INSERT = {
       return;
     }
     if (param === 'sc') {
-      if (insert.art !== 'komp' && insert.art !== 'eq') ab('argument_unbekannt', `param: sc (only the compressor and the EQ have a key; ${insert.art})`);
+      if (insert.art !== 'komp' && insert.art !== 'eq' && insert.art !== 'mb') {
+        ab('argument_unbekannt', `param: sc (only the compressor, the EQ and the multiband have a key; ${insert.art})`);
+      }
       if (a.wert === undefined) ab('argument_ungueltig', 'wert: fehlt');
       const sc = schluesselArg(p, a.wert, strangKennung(p, strang), insert);
       if (sc > 0) insert.sc = sc; else delete insert.sc;
@@ -230,7 +236,9 @@ export const INSERT = {
       return;
     }
     if (param === 'key') {   // slice 5: every other source; null removes the structural key
-      if (insert.art !== 'komp' && insert.art !== 'eq') ab('argument_unbekannt', `param: key (only the compressor and the EQ have a key; ${insert.art})`);
+      if (insert.art !== 'komp' && insert.art !== 'eq' && insert.art !== 'mb') {
+        ab('argument_unbekannt', `param: key (only the compressor, the EQ and the multiband have a key; ${insert.art})`);
+      }
       if (a.wert === undefined) ab('argument_ungueltig', 'wert: fehlt');
       const def = schluesselDef(p, strangKennung(p, strang), a.wert, insert);
       if (def === null) delete insert.key;

@@ -96,6 +96,34 @@ int main() {
     PRUEF(nl >= 5 && nk >= 5);
   }
 
+  // ---- strand 13 slice 4: an mb stage also reports ins/mb/<n>/b1..b3, the signed change per band; a quiet high tone lifted upward in band 3 reads negative
+  {
+    arr35::Lauf x(ab.pfad, "test_kern_arr_inserts_mb");
+    const std::string a = x.ordner.sinus('b', 400000, 6000.0, 0.001f);   // -60 dBFS in the high band
+    x.teil("ins/mb/8/u3/ratio", 2.0f, 0.0, 0.0);
+    x.teil("ins/mb/8/u3/schwelle", -40.0f, 0.0, 0.0);
+    x.teil("ins/mb/8/u3/bereich", 6.0f, 0.0, 0.0);
+    x.teil("ins/mb/8/an", 1.0f, 0.0, 0.0);
+    x.laden(1, "{\"nr\":1,\"art\":\"audio\",\"chain\":[{\"art\":\"mb\",\"slot\":8}],\"clips\":[" + x.ordner.clip("c1", 0.0, 8.0, a, 400000) + "]}", "andreas", true);
+    x.start(0.0, 0);
+    x.lauf(300 * N);
+    int n_stufe = 0, n_band[3] = {0, 0, 0};
+    float b3 = 0.0f, b1 = 0.0f;
+    for (const cdj::Ereignis& e : x.ev) {
+      if (e.art != cdj::Ereignis::INS_GR) continue;
+      const std::string p = e.pfad;
+      if (p == "ins/mb/8") ++n_stufe;
+      else if (p == "ins/mb/8/b1") { ++n_band[0]; b1 = e.wert; }
+      else if (p == "ins/mb/8/b2") ++n_band[1];
+      else if (p == "ins/mb/8/b3") { ++n_band[2]; b3 = e.wert; }
+      else PRUEF(false);
+    }
+    std::printf("mb INS_GR events: stage %d, bands %d %d %d; last band 3 %.2f dB, band 1 %.2f dB\n", n_stufe, n_band[0], n_band[1], n_band[2], b3, b1);
+    PRUEF(n_stufe >= 5 && n_band[0] == n_stufe && n_band[1] == n_stufe && n_band[2] == n_stufe);
+    PRUEF(b3 < -5.5f && b3 > -6.5f);   // the lift reads negative
+    PRUEF(b1 == 0.0f);
+  }
+
   // ---- T9 (device faces): STUFE_PEGEL, the input and output peak of a stage, through the whole kernel
   {
     struct Pegel { std::string pfad; float ein, aus; };

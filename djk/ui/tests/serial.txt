@@ -75,7 +75,11 @@ collection_listen.test.mjs
 collection.test.mjs
 sampler_render.test.mjs
 safety_net.test.mjs
-server.test.mjs
+server_deck_operation.test.mjs
+server_sound_fx.test.mjs
+server_routes_inventory.test.mjs
+server_track_run.test.mjs
+server_track_restart.test.mjs
 spectrum_stream.test.mjs
 lock.test.mjs
 track_pool_state.test.mjs

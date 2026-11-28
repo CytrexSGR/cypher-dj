@@ -141,7 +141,7 @@ test('one apply on a project target = one history entry; undo restores the value
   assert.equal(w.code, 200, JSON.stringify(w.j));
   assert.equal(w.j.rev, 2, 'rev raised by exactly 1');
   assert.equal((await ruf(url, 'GET', '/proj/verlauf')).j.length, n0 + 1, 'exactly one new history entry');
-  assert.deepEqual(w.j.projekt.spuren[0].inserts[0].werte, { schwelle: -18, ratio: 4, knie: 6, attack: 30, release: 100, makeup: 3, mix: 1, schp: 90 });
+  assert.deepEqual(w.j.projekt.spuren[0].inserts[0].werte, { schwelle: -18, ratio: 4, knie: 6, attack: 30, release: 100, makeup: 3, mix: 1, schp: 90, glue: 0, auto: 0 });   // glue and auto (strand 13) keep their default
   assert.equal(w.j.projekt.spuren[0].inserts[0].preset, 'werk:komp/drum-bus');
   const u = await ruf(url, 'POST', '/proj/undo', { rev: 2 });
   assert.equal(u.code, 200, JSON.stringify(u.j));

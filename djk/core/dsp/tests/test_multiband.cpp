@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -376,6 +377,251 @@ void test_anzeige() {
     PRUEF(k->band_einstellung(Band::hoch).schwelle_db == kMbSchwelleMinDb);
 }
 
+// 10. Strand 13 slice 4, check (a) and (e): with the defaults (no key, upward ratio 1) the object is bit-identical to the one before the
+//     key and the upward path existed. The hash was taken from the pre-change code (b7ec3fb0c) on this scenario: three active bands with
+//     auto make-up, a solo switch, a crossover change and a dynamics takeover (the DJ mixer's crossfade path).
+std::uint64_t fnv(const std::vector<float>& x, std::uint64_t h = 1469598103934665603ull) {
+    for (float v : x) {
+        std::uint32_t u;
+        std::memcpy(&u, &v, sizeof u);
+        for (int i = 0; i < 4; ++i) { h ^= (u >> (8 * i)) & 0xffu; h *= 1099511628211ull; }
+    }
+    return h;
+}
+std::uint64_t szenario_hash(bool upward_ratio_1_explizit) {
+    std::mt19937 rng(13);
+    std::normal_distribution<float> nd(0.0f, 0.25f);
+    std::vector<float> l(30000), r(30000);
+    for (std::size_t i = 0; i < l.size(); ++i) { l[i] = nd(rng); r[i] = 0.7f * nd(rng); }
+    auto band = [&](float t, float v, float kn, float an, float ab, bool au) {
+        MbBandEinstellung e = komp(t, v, kn, 1.5f, an, ab);
+        e.aufholen_auto = au;
+        if (upward_ratio_1_explizit) { e.auf_verhaeltnis = 1.0f; e.auf_schwelle_db = -10.0f; e.auf_bereich_db = 24.0f; }
+        return e;
+    };
+    auto k = std::make_unique<Komp>(kAbtastrate, 250.0, 2500.0);
+    auto k2 = std::make_unique<Komp>(kAbtastrate, 300.0, 3000.0);
+    k->setze_band(Band::tief, band(-30.0f, 4.0f, 6.0f, 2.0f, 80.0f, true));
+    k->setze_band(Band::mitte, band(-25.0f, 8.0f, 0.0f, 0.5f, 30.0f, true));
+    k->setze_band(Band::hoch, band(-35.0f, 2.0f, 12.0f, 10.0f, 300.0f, false));
+    k->leeren();
+    std::vector<float> yl(l.size()), yr(l.size()), zl(l.size()), zr(l.size());
+    for (std::size_t p = 0; p < l.size(); p += 256) {
+        const int n = static_cast<int>(std::min<std::size_t>(256, l.size() - p));
+        if (p == 10240) {
+            MbBandEinstellung e = band(-25.0f, 8.0f, 0.0f, 0.5f, 30.0f, true);
+            e.solo = true;
+            k->setze_band(Band::mitte, e);
+        }
+        if (p == 15360) k->setze_grenzen(180.0, 4000.0);
+        if (p == 20480) k2->uebernehme_dynamik(*k);
+        k->verarbeite(&l[p], &r[p], &yl[p], &yr[p], n);
+        k2->verarbeite(&l[p], &r[p], &zl[p], &zr[p], n);
+    }
+    std::uint64_t h = fnv(yl);
+    h = fnv(yr, h);
+    h = fnv(zl, h);
+    h = fnv(zr, h);
+    for (int b = 0; b < 3; ++b) {
+        const float g[3] = {k->groesste_absenkung_db(static_cast<Band>(b)), k->aktuelle_absenkung_db(static_cast<Band>(b)),
+                            k->ausgleich_db(static_cast<Band>(b))};
+        h = fnv(std::vector<float>(g, g + 3), h);
+    }
+    return h;
+}
+void test_bitgleich() {
+    constexpr std::uint64_t kVorher = 0xc57f8ba020e66b72ull;   // pre-change code, b7ec3fb0c
+    const std::uint64_t h = szenario_hash(false);
+    std::printf("defaults: scenario hash %016llx (before the change %016llx)\n", static_cast<unsigned long long>(h),
+                static_cast<unsigned long long>(kVorher));
+    PRUEF(h == kVorher);
+    // Upward ratio 1 with other upward settings is the same object (ratio 1 = off).
+    PRUEF(szenario_hash(true) == kVorher);
+}
+
+// 11. Upward compression (D10): ratio 2, threshold -40 dB, range 6 dB in the low band (crossovers 1/5 kHz so a 200 Hz tone lies in it).
+//     Lift = min(range, (T - L) (1 - 1/R)): -60 dBFS -> 6 dB (cap), -45 dBFS -> 2.5 dB, -95 dBFS -> 0 (below the -90 dBFS floor).
+void test_aufwaerts() {
+    const double faelle[][2] = {{-60.0, 6.0}, {-45.0, 2.5}, {-95.0, 0.0}, {-85.0, 3.0}};   // -85: half of the 6 dB cap (fade -90..-80)
+    for (const auto& f : faelle) {
+        auto k = std::make_unique<Komp>(kAbtastrate, 1000.0, 5000.0);
+        MbBandEinstellung e;   // downward ratio 1, attack 10 ms, release 100 ms, auto make-up on (must not undo the lift)
+        e.auf_verhaeltnis = 2.0f;
+        e.auf_schwelle_db = -40.0f;
+        e.auf_bereich_db = 6.0f;
+        k->setze_band(Band::tief, e);
+        k->leeren();
+        const auto x = messen::sinus(200.0, std::pow(10.0, f[0] / 20.0), 96000);
+        const auto y = durch(*k, x, x);
+        const double g = messen::db(messen::rms(y.l, 72000, 96000) / messen::rms(x, 72000, 96000));
+        const double a = k->aktuelle_anhebung_db(Band::tief);
+        std::printf("upward 200 Hz at %.0f dBFS: gain %.4f dB, lift reading %.4f dB (expected %.1f)\n", f[0], g, a, f[1]);
+        PRUEF_NAH(g, f[1], 0.5);
+        PRUEF_NAH(a, f[1], 0.5);
+        PRUEF(a >= 0.0f);
+        PRUEF(k->ausgleich_db(Band::tief) == 0.0f);   // the automatic make-up excludes the lift
+        PRUEF_NAH(messen::db(messen::rms(y.r, 72000, 96000) / messen::rms(x, 72000, 96000)), g, 1e-6);   // stereo-linked
+    }
+    // Timing: the lift rises with the release time (100 ms) and falls with the attack time (10 ms).
+    auto k = std::make_unique<Komp>(kAbtastrate, 1000.0, 5000.0);
+    MbBandEinstellung e;
+    e.anstieg_ms = 10.0f;
+    e.abklingen_ms = 100.0f;
+    e.auf_verhaeltnis = 2.0f;
+    k->setze_band(Band::tief, e);
+    k->leeren();
+    durch(*k, messen::sinus(200.0, 0.001, 2400), messen::sinus(200.0, 0.001, 2400));   // -60 dBFS (target lift 6 dB) for 50 ms
+    const double nach50 = k->aktuelle_anhebung_db(Band::tief);
+    const auto leise = messen::sinus(200.0, 0.001, 96000);
+    durch(*k, leise, leise);
+    const double satt = k->aktuelle_anhebung_db(Band::tief);
+    const auto laut = messen::sinus(200.0, 0.1, 480);   // -20 dBFS: above the threshold, target 0, for 10 ms = the attack time
+    durch(*k, laut, laut);
+    const double nach10 = k->aktuelle_anhebung_db(Band::tief);
+    std::printf("upward timing: after 50 ms %.3f dB, settled %.3f dB, 10 ms after the level rose %.3f dB\n", nach50, satt, nach10);
+    PRUEF(nach50 > 0.25 * satt && nach50 < 0.55 * satt);   // one-pole with 100 ms: 1 - e^-0.5 = 0.39
+    PRUEF(nach10 > 0.2 * satt && nach10 < 0.5 * satt);     // one-pole with 10 ms: e^-1 = 0.37
+}
+
+// 12. Key (D9): steady 300 Hz tone in the low band (crossovers 1/5 kHz, thr -30, ratio 4), key = bursts at -6 dBFS. A 60 Hz key ducks the
+//     low band (> 6 dB during the bursts, < 0.5 dB in the last 40 ms of each gap, 200 ms after the burst at a 50 ms release); an 8 kHz key is split into the high band and leaves the low band alone.
+void test_schluessel() {
+    for (double fk : {60.0, 8000.0}) {
+        auto k = std::make_unique<Komp>(kAbtastrate, 1000.0, 5000.0);
+        k->setze_band(Band::tief, komp(-30.0f, 4.0f, 0.0f, 0.0f, 1.0f, 50.0f));
+        k->leeren();
+        const int n = 48000;
+        const auto ton = messen::sinus(300.0, 0.1, n);
+        const auto s = messen::sinus(fk, 0.5, n);
+        std::vector<float> key(n, 0.0f);
+        for (int i = 0; i < n; ++i) if ((i / 12000) % 2 == 1) key[i] = s[i];   // bursts at 0.25..0.5 s and 0.75..1 s
+        std::vector<float> yl(n), yr(n);
+        double gr_burst = 0.0, gr_pause = 0.0;
+        for (int p = 0; p < n; p += 256) {
+            const int m = std::min(256, n - p);
+            k->verarbeite(&ton[p], &ton[p], &yl[p], &yr[p], m, &key[p], &key[p]);
+            const int t = p + m;
+            if (t > 18000 && t <= 24000) gr_burst = std::max(gr_burst, -static_cast<double>(k->aktuelle_absenkung_db(Band::tief)));
+            if (t > 34000 && t <= 36000) gr_pause = std::max(gr_pause, -static_cast<double>(k->aktuelle_absenkung_db(Band::tief)));
+        }
+        const double aus = messen::db(messen::rms(yl, 18000, 24000) / messen::rms(ton, 18000, 24000));
+        std::printf("key %5.0f Hz bursts: low-band GR during %.3f dB, between %.3f dB, tone gain during %.3f dB\n", fk, gr_burst, gr_pause, aus);
+        if (fk < 1000.0) {
+            PRUEF(gr_burst > 6.0);
+            PRUEF(aus < -6.0);
+        } else {
+            PRUEF_KLEINER(gr_burst, 0.5);
+            PRUEF_NAH(aus, 0.0, 0.5);
+        }
+        PRUEF_KLEINER(gr_pause, 0.5);
+    }
+    // Key = the input itself: the key split gives the same band signals, so the output is bit-identical to no key.
+    {
+        std::mt19937 rng(5);
+        std::normal_distribution<float> nd(0.0f, 0.3f);
+        std::vector<float> l(20000), r(20000);
+        for (std::size_t i = 0; i < l.size(); ++i) { l[i] = nd(rng); r[i] = 0.5f * nd(rng); }
+        auto mach = [] {
+            auto k = std::make_unique<Komp>();
+            k->setze_band(Band::tief, komp(-30.0f, 4.0f, 6.0f, 3.0f, 2.0f, 80.0f));
+            k->setze_band(Band::mitte, komp(-25.0f, 8.0f, 0.0f, 0.0f, 0.5f, 30.0f));
+            k->setze_band(Band::hoch, komp(-35.0f, 2.0f, 12.0f, -3.0f, 10.0f, 300.0f));
+            k->leeren();
+            return k;
+        };
+        auto a = mach(), b = mach();
+        std::vector<float> al(l.size()), ar(l.size()), bl(l.size()), br(l.size());
+        a->verarbeite(l.data(), r.data(), al.data(), ar.data(), 4096);
+        b->verarbeite(l.data(), r.data(), bl.data(), br.data(), 4096, l.data(), r.data());
+        PRUEF(std::memcmp(al.data(), bl.data(), 4096 * sizeof(float)) == 0);
+        PRUEF(std::memcmp(ar.data(), br.data(), 4096 * sizeof(float)) == 0);
+    }
+    // A key that goes away and comes back starts clean: tone below the threshold, loud key, 4 s without key (detectors settle to exact 0), then key = noise again.
+    // Bit-identical to an object that never had the first key.
+    {
+        auto mach = [] {
+            auto k = std::make_unique<Komp>(kAbtastrate, 1000.0, 5000.0);
+            k->setze_band(Band::tief, komp(-30.0f, 4.0f, 0.0f, 0.0f, 1.0f, 50.0f));
+            k->leeren();
+            return k;
+        };
+        auto a = mach(), b = mach();
+        std::vector<float> ton = messen::sinus(300.0, 0.01, kMaxFrames), y1(kMaxFrames), y2(kMaxFrames), z(kMaxFrames);
+        std::mt19937 rng(9);
+        std::normal_distribution<float> nd(0.0f, 0.4f);
+        std::vector<float> rausch(kMaxFrames);
+        for (float& v : rausch) v = nd(rng);
+        a->verarbeite(ton.data(), ton.data(), y1.data(), z.data(), kMaxFrames, rausch.data(), rausch.data());
+        b->verarbeite(ton.data(), ton.data(), y2.data(), z.data(), kMaxFrames);
+        for (int i = 0; i < 4 * 48000 / kMaxFrames + 1; ++i) {
+            a->verarbeite(ton.data(), ton.data(), y1.data(), z.data(), kMaxFrames);
+            b->verarbeite(ton.data(), ton.data(), y2.data(), z.data(), kMaxFrames);
+        }
+        PRUEF(a->aktuelle_absenkung_db(Band::tief) == 0.0f);
+        for (float& v : rausch) v = nd(rng);
+        a->verarbeite(ton.data(), ton.data(), y1.data(), z.data(), kMaxFrames, rausch.data(), rausch.data());
+        b->verarbeite(ton.data(), ton.data(), y2.data(), z.data(), kMaxFrames, rausch.data(), rausch.data());
+        PRUEF(std::memcmp(y1.data(), y2.data(), kMaxFrames * sizeof(float)) == 0);
+    }
+    // Key with NaN counts as 0; a silent key gives no reduction and no lift from the key (the lift uses the band's own level).
+    {
+        auto k = std::make_unique<Komp>(kAbtastrate, 1000.0, 5000.0);
+        MbBandEinstellung e = komp(-30.0f, 4.0f, 0.0f, 0.0f, 1.0f, 50.0f);
+        e.auf_verhaeltnis = 2.0f;
+        k->setze_band(Band::tief, e);
+        k->leeren();
+        const auto ton = messen::sinus(300.0, 0.1, kMaxFrames);   // -20 dBFS: above the upward threshold, so no lift
+        std::vector<float> key(kMaxFrames, std::numeric_limits<float>::quiet_NaN()), yl(kMaxFrames), yr(kMaxFrames);
+        for (int i = 0; i < 40; ++i) k->verarbeite(ton.data(), ton.data(), yl.data(), yr.data(), kMaxFrames, key.data(), key.data());
+        bool endlich = true;
+        for (float v : yl) endlich = endlich && std::isfinite(v);
+        PRUEF(endlich);
+        PRUEF(k->aktuelle_absenkung_db(Band::tief) == 0.0f);
+        PRUEF_KLEINER(k->aktuelle_anhebung_db(Band::tief), 0.01);
+        PRUEF_NAH(messen::db(messen::rms(yl, 0, kMaxFrames) / messen::rms(ton, 0, kMaxFrames)), 0.0, 0.05);
+    }
+}
+
+// 13. Signed reading: groesste_aenderung_db is read-and-reset, positive = reduction, negative = lift, the larger magnitude wins.
+void test_aenderung() {
+    auto k = std::make_unique<Komp>(kAbtastrate, 1000.0, 5000.0);
+    MbBandEinstellung e = komp(-30.0f, 4.0f, 0.0f, 0.0f, 1.0f, 50.0f);
+    e.auf_verhaeltnis = 2.0f;   // upward threshold -40, range 6
+    k->setze_band(Band::tief, e);
+    k->leeren();
+    const auto leise = messen::sinus(200.0, 0.001, 48000);
+    const auto laut = messen::sinus(200.0, 0.5, 48000);
+    durch(*k, leise, leise);
+    const float a = k->groesste_aenderung_db(Band::tief);
+    std::printf("signed reading quiet %.3f dB\n", a);
+    PRUEF(a < -5.5f && a >= -6.0f);
+    PRUEF(k->groesste_aenderung_db(Band::tief) == 0.0f);   // reset by the read
+    durch(*k, laut, laut);
+    const float b = k->groesste_aenderung_db(Band::tief);
+    std::printf("signed reading loud %.3f dB (lift still ringing at the start, reduction about 18 dB wins)\n", b);
+    PRUEF(b > 15.0f);
+    PRUEF(k->groesste_aenderung_db(Band::mitte) == 0.0f);
+    PRUEF(k->aktuelle_anhebung_db(Band::mitte) == 0.0f);
+    // A bypassed band reads 0.
+    e.umgehen = true;
+    k->setze_band(Band::tief, e);
+    durch(*k, leise, leise);
+    PRUEF(k->aktuelle_anhebung_db(Band::tief) == 0.0f);
+    PRUEF(k->groesste_aenderung_db(Band::tief) == 0.0f);
+    // Clamping of the upward settings.
+    MbBandEinstellung w;
+    w.auf_schwelle_db = -200.0f;
+    w.auf_verhaeltnis = 9.0f;
+    w.auf_bereich_db = 99.0f;
+    k->setze_band(Band::hoch, w);
+    const MbBandEinstellung& g = k->band_einstellung(Band::hoch);
+    PRUEF(g.auf_schwelle_db == kMbAufSchwelleMinDb && g.auf_verhaeltnis == kMbAufVerhaeltnisMax && g.auf_bereich_db == kMbAufBereichMaxDb);
+    w.auf_verhaeltnis = std::numeric_limits<float>::quiet_NaN();
+    w.auf_bereich_db = -1.0f;
+    k->setze_band(Band::hoch, w);
+    PRUEF(k->band_einstellung(Band::hoch).auf_verhaeltnis == kMbAufVerhaeltnisMax && k->band_einstellung(Band::hoch).auf_bereich_db == kMbAufBereichMinDb);
+}
+
 int rot_in(void (*t)()) {
     const int vor = pruef::fehler();
     t();
@@ -395,6 +641,10 @@ int main(int argc, char** argv) {
     rot_in(test_schalten);
     rot_in(test_bloecke);
     rot_in(test_anzeige);
+    rot_in(test_bitgleich);
+    rot_in(test_aufwaerts);
+    rot_in(test_schluessel);
+    rot_in(test_aenderung);
     if (mutation) {
         const bool rot = std::strcmp(mutation, "allpass") == 0 ? flach > 0 : kopplung > 0;
         std::printf("mutation build \"%s\": %s\n", mutation, rot ? "red as expected" : "GREEN, the test misses it");

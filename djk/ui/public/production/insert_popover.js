@@ -5,7 +5,7 @@
 // one floating popover at a time, position: fixed at the bottom left of the anchor, closed by its X, Escape, a click outside, a project switch or when its stage is gone.
 // Every change goes through ctx.aendere (insert_param_setzen, coalesced per parameter), like the old rows did.
 import {
-  ARTEN, KOPF, BK_PARAMETER, EQ_BAENDER, EQ_BAND_PARAMETER, MB_BAENDER, MB_BAND_PARAMETER, bandText, mbBandName, POS_MAX, bkZahl, eqBandName, freqVonPos, posVonFreq, parameterVon, wertText, paramBefehl, straenge,
+  ARTEN, KOPF, BK_PARAMETER, EQ_BAENDER, EQ_BAND_PARAMETER, MB_BAENDER, MB_BAND_PARAMETER, MB_UP_PARAMETER, bandText, mbBandName, mbUpName, POS_MAX, bkZahl, eqBandName, freqVonPos, posVonFreq, parameterVon, wertText, paramBefehl, straenge,
   gemapptVon, rackWerte, makroWert,
 } from './inserts.js';
 import { baueParameterListe } from './plugin_parameter.js';
@@ -23,6 +23,7 @@ const zeileHtml = (art, q, name, beschriftung) => {
   else steuer = `<input class="p-ins-param" data-param="${name}" type="range" min="${q.min}" max="${q.max}" step="${q.schritt}" title="${titel}">`;
   return `<label class="p-ins-zeile">${beschriftung}${steuer}<output class="p-ins-wert" data-param="${name}"></output></label>`;
 };
+const SC_NAME = { komp: 'compressor', mb: 'multiband', eq: 'EQ' };   // the stage kinds with a key and how the labels call them
 // the value a control carries: a log slider maps its position, a checkbox is 0/1, everything else is the number in it
 const lies = (r, q) => (r.type === 'checkbox' ? (r.checked ? 1 : 0) : r.dataset.skala === 'log' ? freqVonPos(Number(r.value), q) : Number(r.value));
 const setze = (r, q, v) => {
@@ -132,7 +133,7 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
   function baue() {
     const kopfZeilen = i.art === 'bk' ? BK_PARAMETER.slice(0, bkZahl(graphNamen.get(i.graph))) : KOPF[i.art];
     let html = kopfZeilen.map((q) => zeileHtml(i.art, q, q.name, q.label)).join('');
-    if (i.art === 'komp') html += `<label class="p-ins-zeile">Key<select class="p-ins-sc" aria-label="Sidechain key of the compressor on ${s.name}"></select><output></output></label>`;
+    if (i.art === 'komp' || i.art === 'mb' || i.art === 'eq') html += `<label class="p-ins-zeile">Key<select class="p-ins-sc" aria-label="Sidechain key of the ${SC_NAME[i.art]} on ${s.name}"></select><output></output></label>`;
     if (i.art === 'eq') {
       for (let m = 1; m <= EQ_BAENDER; m++) {
         html += `<div class="p-ins-band" data-band="${m}"><span class="p-ins-band-kopf">Band ${m}</span>`
@@ -142,7 +143,8 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
     if (i.art === 'mb') {   // the three bands as groups: b1 Low, b2 Mid, b3 High
       for (let m = 1; m <= MB_BAENDER; m++) {
         html += `<div class="p-ins-band" data-band="${m}"><span class="p-ins-band-kopf">${bandText('mb', m)}</span>`
-          + MB_BAND_PARAMETER.map((q) => { const n = mbBandName(m, q.name); return zeileHtml('mb', parameterVon('mb', n), n, q.label); }).join('') + '</div>';
+          + MB_BAND_PARAMETER.map((q) => { const n = mbBandName(m, q.name); return zeileHtml('mb', parameterVon('mb', n), n, q.label); }).join('')
+          + MB_UP_PARAMETER.map((q) => { const n = mbUpName(m, q.name); return zeileHtml('mb', parameterVon('mb', n), n, q.label); }).join('') + '</div>';
       }
     }
     const zu = el.querySelector(':scope > .p-ins-zu'), umschalter = el.querySelector(':scope > .p-ins-liste');   // what a caller put in front survives a rebuild
@@ -152,7 +154,7 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
     if (zu) el.prepend(zu);
     for (const r of el.querySelectorAll('.p-ins-param')) {
       const name = r.dataset.param, k = `${i.id}:${name}`, q = parameterVon(i.art, name);
-      const m = /^b([1-8])\//.exec(name), bt = m ? bandText(i.art, Number(m[1])) : '';
+      const m = /^[bu]([1-8])\//.exec(name), bt = m ? bandText(i.art, Number(m[1])) : '';
       r.closest('.p-ins-zeile').dataset.name = name;
       r.setAttribute('aria-label', `${bt ? `${bt} ` : ''}${q.label} of the ${ARTEN[i.art].name} on ${s.name}`);
       const sende = () => {
@@ -179,7 +181,7 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
     }
     const sc = el.querySelector('.p-ins-sc');
     if (sc) {
-      sc.addEventListener('change', (e) => ctx.aendere(`Key compressor on ${s.name}`, [schluesselBefehl(i.id, e.target.value)]));
+      sc.addEventListener('change', (e) => ctx.aendere(`Key ${SC_NAME[i.art] ?? 'compressor'} on ${s.name}`, [schluesselBefehl(i.id, e.target.value)]));
       ladeOptionen();
     }
   }

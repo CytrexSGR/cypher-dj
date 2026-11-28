@@ -74,7 +74,7 @@ static int64_t erster(const Treiber& t) {
     if (t.l[i] != 0.0f || t.r[i] != 0.0f) return static_cast<int64_t>(i);
   return -1;
 }
-// transport stopped, silent clips on tracks 1 and 2 (the output is the monitor and nothing else), `kette_spur` 0: no chain, else the track that holds an eq and a saett (69 + 69 samples)
+// transport stopped, silent clips on tracks 1 and 2 (the output is the monitor and nothing else), `kette_spur` 0: no chain, else the track that holds an eq and a saett (69 + 80 samples since strand 13 slice 2)
 static void aufbau_kette(Treiber& t, const cdj::ArrAudio* a, int kette_spur, int n) {
   static const cdj::ArrStufe EQ{cdj::ArrInsArt::eq, 0, true}, SA{cdj::ArrInsArt::saett, 0, true};
   Bau b;

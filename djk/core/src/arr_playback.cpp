@@ -356,11 +356,11 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
       an = x.at("an").get<bool>();
     }
     ArrSchluessel key;
-    if (x.contains("key")) {   // 1.10 slice 5: the structural sidechain key {q: "spur" | "grp" | "ret" | "pm", nr, punkt: "pre" | "post"}; a compressor, (strand 2 task 3.3) a host stage and (strand 5 slice 4) an EQ stage have a key
+    if (x.contains("key")) {   // 1.10 slice 5: the structural sidechain key {q: "spur" | "grp" | "ret" | "pm", nr, punkt: "pre" | "post"}; a compressor, (strand 2 task 3.3) a host stage, (strand 5 slice 4) an EQ stage and (strand 13 slice 4) an mb stage have a key
       const json& kj = x.at("key");                       // which strip may listen to which source is the table of arr_schluessel_pruefe(), called once all strips are read
       const std::string wk = wx + "key.";
       if (!kj.is_object()) format(wk + "key ist kein Objekt");
-      if (a != ArrInsArt::komp && a != ArrInsArt::host && a != ArrInsArt::eq) format(wk + "only a komp, eq or host stage has a sidechain key (" + art + ")");
+      if (a != ArrInsArt::komp && a != ArrInsArt::host && a != ArrInsArt::eq && a != ArrInsArt::mb) format(wk + "only a komp, eq, mb or host stage has a sidechain key (" + art + ")");   // strand 13 slice 4: mb
       const std::string q = text(kj, "q", wk);
       int nmax = 0;
       bool dj = false, strom = false;
@@ -483,7 +483,9 @@ void lese_rack(const json& o, const std::string& wo, const ArrKette& k, ArrRack&
     if (pa < 0 || pa >= ins_param_zahl(art)) format(wx + "param " + std::to_string(pa) + " außerhalb der Parameter der Stufe");
     if (pa == 0) format(wx + "param 0 (an) kann nicht gemappt werden");
     if (art == ArrInsArt::komp && pa == INS_KOMP_SC) format(wx + "param 9 (sc, der Schlüssel) kann nicht gemappt werden");
+    if (art == ArrInsArt::komp && (pa == INS_KOMP_GLUE || pa == INS_KOMP_AUTO)) format(wx + "param " + std::to_string(pa) + " (glue/auto, a switch) cannot be mapped");   // strand 13 slice 1
     if (art == ArrInsArt::eq && pa == INS_EQ_SC) format(wx + "param 85 (sc, der Schlüssel) kann nicht gemappt werden");   // strand 5 slice 4
+    if (art == ArrInsArt::mb && pa == INS_MB_SC) format(wx + "param 33 (sc, the key) cannot be mapped");   // strand 13 slice 4
     if (belegt[st][pa]) format(wx + "ziel (stufe " + std::to_string(st) + ", param " + std::to_string(pa) + ") doppelt (ein Parameter hat eine Quelle)");
     belegt[st][pa] = true;
     ArrMakroZiel z;
@@ -630,7 +632,9 @@ void lese_kette_auto(const json& o, const std::string& wo, int strip, ArrSnapsho
       if (pa < 0 || pa >= ins_param_zahl(art)) format(wl + "param " + std::to_string(pa) + " outside the parameters of the stage");
       if (pa == 0) format(wl + "param 0 (an) cannot be automated");
       if (art == ArrInsArt::komp && pa == INS_KOMP_SC) format(wl + "param 9 (sc, the key) cannot be automated");
+      if (art == ArrInsArt::komp && (pa == INS_KOMP_GLUE || pa == INS_KOMP_AUTO)) format(wl + "param " + std::to_string(pa) + " (glue/auto, a switch) cannot be automated");   // strand 13 slice 1
       if (art == ArrInsArt::eq && pa == INS_EQ_SC) format(wl + "param 85 (sc, the key) cannot be automated");   // strand 5 slice 4
+      if (art == ArrInsArt::mb && pa == INS_MB_SC) format(wl + "param 33 (sc, the key) cannot be automated");   // strand 13 slice 4
       for (size_t q = l0; q < static_cast<size_t>(snap.n_klanes); ++q)
         if (snap.klane[q].strip == strip && snap.klane[q].makro < 0 && snap.klane[q].stufe == st && snap.klane[q].param == pa)
           format(wl + "ziel (stufe " + std::to_string(st) + ", param " + std::to_string(pa) + ") twice on one strip");
@@ -802,7 +806,9 @@ void lese_mod(const json& j, ArrSnapshot& snap) {
           if (pa < 0 || pa >= ins_param_zahl(art)) format(wz + "param " + std::to_string(pa) + " outside the parameters of the stage");
           if (pa == 0) format(wz + "param 0 (an) cannot be modulated");
           if (art == ArrInsArt::komp && pa == 9) format(wz + "param 9 (sc, the key) cannot be modulated");
+          if (art == ArrInsArt::komp && (pa == INS_KOMP_GLUE || pa == INS_KOMP_AUTO)) format(wz + "param " + std::to_string(pa) + " (glue/auto, a switch) cannot be modulated");   // strand 13 slice 1
           if (art == ArrInsArt::eq && pa == INS_EQ_SC) format(wz + "param 85 (sc, the key) cannot be modulated");   // strand 5 slice 4
+          if (art == ArrInsArt::mb && pa == INS_MB_SC) format(wz + "param 33 (sc, the key) cannot be modulated");   // strand 13 slice 4
           for (int q = 0; q < rk.n; ++q)
             if (rk.z[q].stufe == st && rk.z[q].param == pa)
               format(wz + "(stufe " + std::to_string(st) + ", param " + std::to_string(pa) + ") is mapped by a rack macro (modulate the macro)");

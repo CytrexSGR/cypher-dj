@@ -2,10 +2,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { HAND_QUELLE } from './support/werkzeugzahl.mjs';
+import { handQuelle } from './support/hand_source.mjs';
 import { HAND_KLASSEN, RANG, klasseVon } from '../../ui/http/hand_klassen.ts';
 
-const zeilen = fs.readFileSync(HAND_QUELLE, 'utf8').split('\n');
+const zeilen = handQuelle().split('\n');
 const starts = [];
 zeilen.forEach((z, i) => { if (z.startsWith("  { name: '")) starts.push([z.slice(11).split("'")[0], i]); });
 const block = (name) => {

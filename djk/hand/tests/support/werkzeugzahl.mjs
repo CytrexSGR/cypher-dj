@@ -4,7 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { handQuelle } from './hand_source.mjs';
 
 export const HAND_QUELLE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'hand.ts');
-export const WERKZEUGE_IM_CODE = fs.readFileSync(HAND_QUELLE, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length;
-export const PROJ_WERKZEUGE_IM_CODE = fs.readFileSync(HAND_QUELLE, 'utf8').split('\n').filter((z) => z.startsWith("  { name: 'proj_")).length;
+export const WERKZEUGE_IM_CODE = handQuelle().split('\n').filter((z) => z.startsWith("  { name: '")).length;
+export const PROJ_WERKZEUGE_IM_CODE = handQuelle().split('\n').filter((z) => z.startsWith("  { name: 'proj_")).length;

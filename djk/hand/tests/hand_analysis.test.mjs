@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { fuerHand } from '../../ui/project/sound_contract.ts';
+import { handQuelle } from './support/hand_source.mjs';
 
 const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'hand.ts');
 const FIXTURE = JSON.parse(fs.readFileSync(path.resolve(path.dirname(HAND), '..', 'ui', 'tests', 'fixtures', 'analyse_antwort.json'), 'utf8'));
@@ -104,7 +105,7 @@ test('the schema and the description', async (t) => {
 test('the tool count is the number of entries in hand.ts', async (t) => {
   const { c } = await verbinde(t);
   assert.equal((await c.listTools()).tools.length, WERKZEUGE_IM_CODE);
-  const imCode = fs.readFileSync(HAND, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length;
+  const imCode = handQuelle().split('\n').filter((z) => z.startsWith("  { name: '")).length;
   assert.equal(imCode, WERKZEUGE_IM_CODE);
 });
 

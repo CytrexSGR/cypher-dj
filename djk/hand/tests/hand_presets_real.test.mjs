@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { handQuelle } from './support/hand_source.mjs';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const HAND = path.resolve(HIER, '..', 'hand.ts');
@@ -32,7 +33,7 @@ async function aufbau(t) {
 test('T5.6 echt: tools/list of the live hand has as many tools as hand.ts has entries; presets_suchen {familie: instrument} returns the 10 rb338 factory presets, {art: [bass]} the 7 bass ones', async (t) => {
   const { c, aufruf } = await aufbau(t);
   const n = (await c.listTools()).tools.length;
-  const imCode = fs.readFileSync(HAND, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length;
+  const imCode = handQuelle().split('\n').filter((z) => z.startsWith("  { name: '")).length;
   assert.deepEqual([n, imCode], [WERKZEUGE_IM_CODE, WERKZEUGE_IM_CODE]);
   const alle = await aufruf('presets_suchen', { familie: 'instrument', geraet: ['rb338'] });
   assert.ok(!alle.r.isError, JSON.stringify(alle.j));

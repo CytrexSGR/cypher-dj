@@ -96,7 +96,7 @@ test('track head opener: the FACE button shows for a track with a saturator and 
 });
 
 // ---- strand 5 slice 1: the Cypher Clipper ----------------------------------------------------------------------------------------------------
-const CLIPPER = { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'saett', werte: { kurve: 2, drive: 0, out: 0, decke: -0.3, mix: 1 } };
+const CLIPPER = { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'saett', werte: { kurve: 2, drive: 0, out: 0, decke: -0.3, knie: 3, mix: 1 } };
 
 test('clip curves: Hard at drive 12 and ceiling -6 is flat at 0.501 * out above |x| > 0.126; Soft ends flat at the ceiling; Tanh at ceiling 0 is the old curve', () => {
   const hart = { drive: 12, out: 0, mix: 1, kurve: 2, decke: -6 };
@@ -123,14 +123,14 @@ test('the saturator reports its clip amount on ins/saett/<n> into the gr store, 
   assert.equal(insGrAufnehmen(g, { kanal: `ins/saett/${MAX_SAETT + 1}`, gr_db: 1 }, 1000), false);
 });
 
-test('the Clipper menu entry sends insert_setzen saett with kurve 2 (Hard), ceiling -0.3 dB; the pool and a full strip grey it', () => {
+test('the Clipper menu entry sends insert_setzen saett with kurve 2 (Hard), ceiling -0.3 dB, knie 3; the pool and a full strip grey it', () => {
   let p = lauf(neuesProjekt('Clip entry'), [{ befehl: 'spur_neu', art: 'audio', name: 'Kick' }]);
   const e = plusEintraege(p, 's1', [], {}).find((x) => x.text === 'Clipper');
   assert.deepEqual(e.befehl, CLIPPER); assert.deepEqual(CLIPPER.werte, KLIPPER_WERTE); assert.equal(e.label, 'Add Clipper to Kick');
-  assert.deepEqual(plusEintraege(p, 's1', [], {}).slice(3, 5).map((x) => x.text), ['Saturator', 'Clipper']);
+  assert.deepEqual(plusEintraege(p, 's1', [], {}).slice(4, 6).map((x) => x.text), ['Saturator', 'Clipper']);
   const q = lauf(p, [{ befehl: 'insert_setzen', ...CLIPPER }]);
   const ins = q.spuren[0].inserts[0];
-  assert.deepEqual([ins.art, ins.werte.kurve, ins.werte.decke, ins.werte.drive, ins.werte.out], ['saett', 2, -0.3, 0, 0], 'the project takes the command as sent');
+  assert.deepEqual([ins.art, ins.werte.kurve, ins.werte.decke, ins.werte.drive, ins.werte.out, ins.werte.knie], ['saett', 2, -0.3, 0, 0, 3], 'the project takes the command as sent');
   const voll = poolVoll('saett', MAX_SAETT).projekt;   // the whole pool (32) spread over strips of five; the master chain is empty
   const v = plusEintraege(voll, 'master', [], {}).find((x) => x.text === 'Clipper');
   assert.equal(v.befehl, null); assert.equal(v.grund, 'No free saturator');
@@ -162,4 +162,33 @@ test('page: a Clipper stage shows the title Cypher Clipper and the CURVE selecto
   assert.deepEqual((await aend(s)).at(-1).befehle, ['insert_param_setzen']);
   assert.equal(await s.w(`document.querySelector('.p-face .fa-saett-titel').textContent`), 'Cypher Clipper');
   assert.equal(await s.w(`document.querySelector('[data-w="karte-clip"]')?.getAttribute('aria-pressed') ?? 'none'`), 'false', 'the CLIP button shows on the master card, not lit');
+});
+
+test('knee curve (D8): Hard at drive 12, knie 6 dB follows the quadratic knee and ends flat; knie 0 is the sharp corner; Tanh and Soft ignore the knee', () => {
+  const k = Math.min(0.75, 1 - 10 ** (-6 / 20)), c = 1, g = 10 ** (12 / 20);
+  const f = (a) => (a <= 1 - k ? a : a < 1 + k ? a - (a - (1 - k)) ** 2 / (4 * k) : 1);
+  const hart = { drive: 12, out: 0, mix: 1, kurve: 2, decke: 0, knie: 6 };
+  for (const x of [0.01, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5, 1]) {
+    assert.ok(Math.abs(saettAusgang(x, hart) - c * f(g * x / c)) < 1e-9, `x ${x}`);
+    assert.ok(Math.abs(saettAusgang(-x, hart) + c * f(g * x / c)) < 1e-9, `odd x ${x}`);
+  }
+  assert.ok(saettAusgang(0.25, hart) < saettAusgang(0.25, { ...hart, knie: 0 }), 'the knee rounds the corner below the sharp one');
+  assert.equal(saettAusgang(0.5, { ...hart, knie: 0 }), 1);
+  for (const kurve of [0, 1]) assert.equal(saettAusgang(0.2, { ...hart, kurve, knie: 12 }), saettAusgang(0.2, { ...hart, kurve, knie: 0 }), `curve ${kurve} ignores the knee`);
+  assert.equal(saettAusgang(0.2, { ...hart, knie: 99 }), saettAusgang(0.2, { ...hart, knie: 12 }), 'out of range clamps');
+});
+
+test('page: the KNEE knob shows for Hard clip only, and a knob key sends insert_param_setzen knie', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  const s = await seite(t, projekt([['i1', 'kurve', 2]]));
+  await oeffneKlick(s);
+  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-face .fp-name')].map((e) => e.textContent)`), ['Drive', 'Output', 'Mix', 'Ceiling', 'Knee']);
+  await taste(s, 'knie', 'ArrowUp');
+  assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts[0].werte.knie > 0), 'knie in the project');
+  assert.deepEqual((await aend(s)).at(-1).befehle, ['insert_param_setzen']);
+  for (const [wert, name] of [['1', 'Soft clip'], ['0', 'Tanh']]) {
+    await s.w(`(() => { const w = document.querySelector('.p-face .fa-saett-wahl'); w.value = ${JSON.stringify(wert)}; w.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    assert.ok(await s.bis(async () => (await s.w(`[...document.querySelectorAll('.p-face .fp-name')].length`)) === 4), `${name}: no knee knob`);
+  }
+  await s.w(`(() => { const w = document.querySelector('.p-face .fa-saett-wahl'); w.value = '2'; w.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  assert.ok(await s.bis(async () => (await s.w(`[...document.querySelectorAll('.p-face .fp-name')].length`)) === 5), 'Hard clip: the knob is back');
 });

@@ -31,8 +31,8 @@ test('face/sat.js: named values, mix 0, odd symmetry, defaults', () => {
   assert.ok(Math.abs(saettAusgang(0.5, { drive: 12, out: -6, mix: 0.5 }) - 0.49141) < 1e-4);
   for (const x of [-1, -0.3, 0, 0.7, 1]) assert.equal(saettAusgang(x, { drive: 24, out: 3, mix: 0 }), x, 'mix 0 gives x');
   for (const x of [0.05, 0.4, 1]) assert.ok(Math.abs(saettAusgang(-x, a) + saettAusgang(x, a)) < 1e-12, `odd at ${x}`);
-  assert.deepEqual(saettEinstellung({}), { drive: 12, out: -6, mix: 1, kurve: 0, decke: 0 });
-  assert.deepEqual(saettEinstellung({ drive: NaN, out: 99, mix: -1, kurve: 7, decke: 5 }), { drive: 12, out: 12, mix: 0, kurve: 2, decke: 0 });
+  assert.deepEqual(saettEinstellung({}), { drive: 12, out: -6, mix: 1, kurve: 0, decke: 0, knie: 0 });
+  assert.deepEqual(saettEinstellung({ drive: NaN, out: 99, mix: -1, kurve: 7, decke: 5 }), { drive: 12, out: 12, mix: 0, kurve: 2, decke: 0, knie: 0 });
   assert.equal(saettAusgang(0.5, {}), saettAusgang(0.5, a), 'a missing value is the default');
 });
 

@@ -62,10 +62,32 @@ export const KOMP_PARAMETER = [
   { name: 'makeup', label: 'Makeup', einheit: 'dB', min: 0, max: 24, vorgabe: 0, schritt: 0.5 },
   { name: 'mix', label: 'Mix', einheit: '', min: 0, max: 1, vorgabe: 1, schritt: 0.01 },
   { name: 'schp', label: 'Key high-pass', einheit: 'Hz', min: 0, max: 300, vorgabe: 0, schritt: 1 },
+  // strand 13 slice 1: the glue character (stepped ratio, attack, release in the DSP) and the auto release
+  { name: 'glue', label: 'Glue', einheit: '', min: 0, max: 1, vorgabe: 0, typ: 'schalter' },
+  { name: 'auto', label: 'Auto release', einheit: '', min: 0, max: 1, vorgabe: 0, typ: 'schalter' },
 ];
+// The glue steps of comp_dsp (D3); with glue on the DSP snaps ratio, attack and release to the nearest step (log domain, a tie goes to the lower step).
+export const GLUE_RATIO = [1.5, 2, 4, 10];
+export const GLUE_ATTACK = [0.1, 0.3, 1, 3, 10, 30];
+export const GLUE_RELEASE = [100, 200, 400, 800, 1200];
+/** The step of `liste` (ascending) nearest to v in the log domain; a tie goes to the lower step (the rule of comp_dsp `naechste_stufe`). */
+export function glueStufe(liste, v) {
+  const lv = Math.log(Math.max(v, 1e-9));
+  let best = liste[0], bd = Math.abs(lv - Math.log(best));
+  for (const s of liste.slice(1)) { const d = Math.abs(lv - Math.log(s)); if (d < bd - 1e-12) { best = s; bd = d; } }
+  return best;
+}
+/** The Cypher Glue starting points (D6): the values of the compressor parameters a recipe sets. `auto` is always listed (0 or 1) so a recipe leaves no auto release behind. */
+export const GLUE_VORLAGEN = {
+  bus: { text: 'Bus', werte: { schwelle: -16, ratio: 2, attack: 10, auto: 1, knie: 4, makeup: 2, mix: 1, schp: 60 } },
+  drums: { text: 'Drums', werte: { schwelle: -18, ratio: 4, attack: 30, release: 100, auto: 0, knie: 4, makeup: 3, mix: 1, schp: 90 } },
+  master: { text: 'Master', werte: { schwelle: -10, ratio: 1.5, attack: 30, auto: 1, knie: 6, makeup: 1, mix: 1, schp: 40 } },
+  smash: { text: 'Smash', werte: { schwelle: -30, ratio: 10, attack: 0.1, release: 100, auto: 0, knie: 0, makeup: 8, mix: 0.4, schp: 0 } },
+};
 export function paramText(name, v) {
   const q = KOMP_PARAMETER.find((x) => x.name === name);
   if (!q) throw new Error(`unknown compressor parameter ${name}`);
+  if (q.typ === 'schalter') return v >= 0.5 ? 'on' : 'off';
   if (name === 'ratio') return `${v.toFixed(1)}:1`;
   if (name === 'mix') return `${Math.round(v * 100)} %`;
   if (q.einheit === 'Hz') return v < 1 ? 'off' : `${Math.round(v)} Hz`;
@@ -82,6 +104,8 @@ export const SAETT_PARAMETER = [
   // strand 5 slice 1: the face curve (0 Tanh, 1 Soft clip, 2 Hard clip) and the ceiling; curve 1 and 2 are the Cypher Clipper
   { name: 'kurve', label: 'Curve', einheit: '', min: 0, max: 2, vorgabe: 0, typ: 'wahl', optionen: ['Tanh', 'Soft clip', 'Hard clip'] },
   { name: 'decke', label: 'Ceiling', einheit: 'dB', min: -24, max: 0, vorgabe: 0, schritt: 0.1 },
+  // strand 13: the soft corner of the Hard clip curve (0 = the plain hard corner); no effect on Tanh and Soft clip
+  { name: 'knie', label: 'Knee', einheit: 'dB', min: 0, max: 12, vorgabe: 0, schritt: 0.5 },
 ];
 export const LIM_PARAMETER = [
   { name: 'decke', label: 'Ceiling', einheit: 'dB', min: -60, max: 0, vorgabe: -1, schritt: 0.1 },
@@ -136,7 +160,14 @@ export const BILD_PARAMETER = [
   { name: 'breite_hoch', label: 'High width', einheit: '', min: 0, max: 2, vorgabe: 1, schritt: 0.01 },
   { name: 'mono_unter', label: 'Mono below', einheit: 'Hz', min: 0, max: 300, vorgabe: 0, schritt: 1 },
 ];
+// strand 13 slice 4: the upward group of each band (`u1/schwelle` ... `u3/bereich`): ratio 1 = off, the lift is capped at `bereich`
+export const MB_UP_PARAMETER = [
+  { name: 'schwelle', label: 'Upward threshold', einheit: 'dB', min: -80, max: 0, vorgabe: -40, schritt: 0.5 },
+  { name: 'ratio', label: 'Upward ratio', einheit: '', min: 1, max: 4, vorgabe: 1, schritt: 0.1 },
+  { name: 'bereich', label: 'Upward range', einheit: 'dB', min: 0, max: 24, vorgabe: 6, schritt: 0.5 },
+];
 export const mbBandName = (m, name) => `b${m}/${name}`;
+export const mbUpName = (m, name) => `u${m}/${name}`;
 // the name of a band group as the popover and the labels say it: the EQ counts "Band 3", the multiband names "Low band"
 export const bandText = (art, m) => (art === 'mb' ? `${MB_BAND_NAMEN[m - 1]} band` : `Band ${m}`);
 // arr-bk: the 64 knobs of a Baukasten effect stage (0..1, the graph maps them; the names come from the graph, the page shows K1..K64).
@@ -207,6 +238,8 @@ export function parameterVon(art, name) {
   if (art === 'bild') return BILD_PARAMETER.find((x) => x.name === name) ?? null;
   if (art === 'gate') return GATE_PARAMETER.find((x) => x.name === name) ?? null;
   if (art === 'mb') {
+    const mu = /^u([1-3])\/([a-z]+)$/.exec(name);
+    if (mu) return MB_UP_PARAMETER.find((x) => x.name === mu[2]) ?? null;
     const mm = /^b([1-3])\/([a-z]+)$/.exec(name);
     return mm ? MB_BAND_PARAMETER.find((x) => x.name === mm[2]) ?? null : MB_KOPF_PARAMETER.find((x) => x.name === name) ?? null;
   }
@@ -292,7 +325,15 @@ export const INS_GR_FRIST_MS = 500;
 // the key of a reading in the store: the compressor keeps its plain number, the other kinds are `saett<n>` (the clipper's clip amount), `lim<n>`, `gate<n>`, `mb<n>`, `trans<n>` (the transient shaper's largest gain change)
 const grSchluessel = (art, n) => (art === 'komp' ? n : `${art}${n}`);
 export function insGrAufnehmen(stand, f, jetzt) {
-  const m = /^ins\/(komp|saett|lim|gate|mb|trans|eq)\/([0-9]+)$/.exec(typeof f?.kanal === 'string' ? f.kanal : '');
+  const kanal = typeof f?.kanal === 'string' ? f.kanal : '';
+  const band = /^ins\/mb\/([0-9]+)\/b([1-3])$/.exec(kanal);   // strand 13 slice 4: the per-band reading of an mb stage, signed (positive = reduction, negative = lift), stored as `mb<n>/b<m>`
+  if (band) {
+    const n = Number(band[1]), w = f?.gr_db;
+    if (n < 1 || n > MAX_ART.mb || typeof w !== 'number' || !Number.isFinite(w)) return false;
+    stand[`${grSchluessel('mb', n)}/b${band[2]}`] = { db: w, t: jetzt };
+    return true;
+  }
+  const m = /^ins\/(komp|saett|lim|gate|mb|trans|eq)\/([0-9]+)$/.exec(kanal);
   const n = m ? Number(m[2]) : 0;
   const w = f?.gr_db;
   if (n < 1 || n > (m ? MAX_ART[m[1]] : 0) || typeof w !== 'number' || !Number.isFinite(w)) return false;
@@ -345,7 +386,8 @@ export const makroFaehig = (q) => !!q && q.typ !== 'schalter' && q.typ !== 'wahl
 export function parameterNamen(art) {
   if (art === 'host') return [];   // a plugin's parameters are not macro targets (task 11)
   const kopf = KOPF[art].map((q) => q.name);
-  if (art === 'mb') return [...kopf, ...Array.from({ length: MB_BAENDER }, (_, i) => MB_BAND_PARAMETER.map((q) => mbBandName(i + 1, q.name))).flat()];
+  if (art === 'mb') return [...kopf, ...Array.from({ length: MB_BAENDER }, (_, i) => MB_BAND_PARAMETER.map((q) => mbBandName(i + 1, q.name))).flat(),
+    ...Array.from({ length: MB_BAENDER }, (_, i) => MB_UP_PARAMETER.map((q) => mbUpName(i + 1, q.name))).flat()];
   if (art !== 'eq') return kopf;
   const baender = [];
   for (let m = 1; m <= EQ_BAENDER; m++) for (const q of EQ_BAND_PARAMETER) baender.push(eqBandName(m, q.name));
@@ -353,7 +395,7 @@ export function parameterNamen(art) {
   return [...kopf, ...baender, ...EQ_DYN_KOPF.map((q) => q.name)];
 }
 export const parameterLabel = (art, name) => {
-  const q = parameterVon(art, name), m = /^[bd]([1-8])\//.exec(name);
+  const q = parameterVon(art, name), m = /^[bdu]([1-8])\//.exec(name);
   return `${m ? `${bandText(art, Number(m[1]))} ` : ''}${q.label}`;
 };
 // the four macros of a strip as the editor sees them: [{name, ziel: [{insert, param, von, bis}]}] (empty ones when the strip has no rack)

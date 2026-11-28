@@ -52,7 +52,7 @@ void ArrInserts::binde(int slot, int param, float vorgabe, float mn, float mx) {
 void ArrInserts::lane_stufe(int strip, const ArrKette& k, int stufe, int param, float v) {
   if (stufe < 0 || stufe >= k.n || stufe >= ARR_KETTE) return;
   const int g = ins_global(k.st[stufe].art, k.st[stufe].slot);
-  if (g < 0 || besitzer_[g] != strip || param < 1 || param >= n_param(g) || (g < INS_SCHL_ZEILE && param == ins_sc_param(g))) return;   // not the stage switch, not the key row of a komp or eq stage
+  if (g < 0 || besitzer_[g] != strip || param < 1 || param >= n_param(g) || (ins_hat_sc_zeile(ins_schl_index(g)) && param == ins_sc_param(g)) || (g < ARR_INS_KOMP && param >= INS_KOMP_GLUE)) return;   // not the stage switch, not the key row of a komp, eq or mb stage, not the komp switches glue and auto
   if (!std::isfinite(v)) return;   // a lane never hands NaN to a module (the loader checks the points; this guards a hand-built snapshot)
   if (mn_[g][param] < mx_[g][param]) v = v < mn_[g][param] ? mn_[g][param] : (v > mx_[g][param] ? mx_[g][param] : v);
   lane_w_[g][param] = v;
@@ -69,7 +69,7 @@ void ArrInserts::lane_makro(int rack, int nr, float v) {
 void ArrInserts::mod_stufe(int strip, const ArrKette& k, int stufe, int param, float anteil) {
   if (stufe < 0 || stufe >= k.n || stufe >= ARR_KETTE) return;
   const int g = ins_global(k.st[stufe].art, k.st[stufe].slot);
-  if (g < 0 || besitzer_[g] != strip || param < 1 || param >= n_param(g) || (g < ARR_INS_KOMP && param == 9)) return;   // not the stage switch, not the compressor key
+  if (g < 0 || besitzer_[g] != strip || param < 1 || param >= n_param(g) || (g < ARR_INS_KOMP && param >= INS_KOMP_SC)) return;   // not the stage switch, not the compressor key, not the komp switches glue and auto
   if (!std::isfinite(anteil)) return;
   if (!mod_[g][param]) {   // the first offset on this parameter in this block
     if (mod_n_ >= MOD_LISTE) return;
@@ -204,9 +204,9 @@ static bool struktureller_schluessel(const ArrSchluessel& k) {
 void ArrInserts::schluessel_planen(int m) {
   schl_maske_.leeren();
   strukt_n_ = 0;
-  for (int k = 0; k < ARR_INS_SCHL; ++k) {   // strand 2 task 3.3: the komp slots, (strand 5 slice 4) the eq slots, then the host slots (key index k)
+  for (int k = 0; k < ARR_INS_SCHL; ++k) {   // strand 2 task 3.3: the komp slots, (strand 5 slice 4) the eq slots, then the host slots, (strand 13 slice 4) then the mb slots (key index k)
     const int s = ins_schl_slot(k);
-    if (k < INS_SCHL_ZEILE) sc_[k] = 0;
+    sc_[k] = 0;
     strukt_[k] = false;
     if (besitzer_[s] < 0) continue;
 #ifndef CYPHERDJ_MUTATION_SC_STRUKTUR_IGNORIERT   // error case: a structural key is ignored, the row path (sc = 0: the stage's own signal) is used
@@ -220,10 +220,10 @@ void ArrInserts::schluessel_planen(int m) {
       continue;
     }
 #endif
-    if (k >= INS_SCHL_ZEILE) continue;   // the row key (sc) is komp and eq (strand 5 slice 4), not host
+    if (!ins_hat_sc_zeile(k)) continue;   // the row key (sc) is komp, eq (strand 5 slice 4) and mb (strand 13 slice 4), not host
     const long n = std::lround(eff(s, ins_sc_param(s), m));
     if (n >= 1 && n <= ARR_SPUREN) {
-      sc_[s] = static_cast<int>(n);
+      sc_[k] = static_cast<int>(n);
       schl_maske_.setze(static_cast<int>(n - 1));
     }
   }
@@ -346,6 +346,7 @@ void ArrInserts::leere(int s) {
 void ArrInserts::mb_leere(int i) {
   mb_[i][0]->leeren();
   mb_[i][1]->leeren();
+  for (float& g : gr_band_[i]) g = 0.0f;   // strand 13 slice 4
   mb_lief_[i] = false;
   mb_gb_an_[i] = false;
   mb_gpos_[i] = 0;
@@ -538,14 +539,16 @@ bool ArrInserts::nutzt(const CypherBk* h) const noexcept {
 
 // Gives the parameter set of a slot to its module when a value changed since the last block (the first block always).
 void ArrInserts::setze_dsp(int s, int m) {
-  const int n = s < INS_SCHL_ZEILE ? ins_sc_param(s) : n_param(s);   // komp and eq: the key (komp 9, eq 85, the last row) is not a module setting; the values 1 .. n - 1 are
+  if (s < ARR_INS_KOMP) {   // strand 13 slice 1: the komp values 1..8 go to setze, the switches glue (10) and auto (11) to setze_charakter; the key (9) is not a module setting
+    setze_komp(s, m);
+    return;
+  }
+  const int n = ins_hat_sc_zeile(ins_schl_index(s)) ? ins_sc_param(s) : n_param(s);   // eq, mb: the key (eq 85, mb 33, the last row) is not a module setting; the values 1 .. n - 1 are
   float e[INS_PARAM_MAX];
   for (int k = 1; k < n; ++k) e[k] = eff(s, k, m);
   const bool neu = !gesetzt_[s];
   if (!neu && std::memcmp(e + 1, angewandt_[s] + 1, sizeof(float) * static_cast<size_t>(n - 1)) == 0) return;
-  if (s < ARR_INS_KOMP) {
-    komp_[s]->setze(CypherKompEinstellung{e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8]});
-  } else if (s < INS_G_SAETT0) {
+  if (s < INS_G_SAETT0) {
     EqNativ& q = *eq_[s - ARR_INS_KOMP];
     const float* alt = angewandt_[s];
     if (neu || e[1] != alt[1] || e[2] != alt[2]) q.setze_global(e[2] >= 0.5f, static_cast<double>(e[1]));
@@ -569,6 +572,8 @@ void ArrInserts::setze_dsp(int s, int m) {
     // strand 5 slice 1: the clip curve (step row, rounded, 0 Tanh .. 2 Hard) and the ceiling (dBFS); the defaults (0, 0 dB) leave the saturation bit-identical
     const float kv = e[4];
     saett_[s - INS_G_SAETT0]->setze_form(std::isfinite(kv) ? static_cast<int>(std::lround(std::clamp(kv, 0.0f, 2.0f))) : 0, static_cast<double>(e[5]));
+    // strand 13 slice 2: the knee of the Hard curve (dB, the module clamps to 0..12 and ignores a non-finite value); 0, the default of a project without the row, is the sharp corner of before
+    if (neu || e[INS_SAETT_KNIE] != angewandt_[s][INS_SAETT_KNIE]) saett_[s - INS_G_SAETT0]->setze_knie(static_cast<double>(e[INS_SAETT_KNIE]));
 #ifdef CYPHERDJ_MUTATION_INS_SAETT_AUS_NACH_DRIVE
     saett_[s - INS_G_SAETT0]->setze(static_cast<double>(e[2]), static_cast<double>(e[1]), static_cast<double>(e[3]));   // error case: drive and output gain swapped
 #else
@@ -600,7 +605,8 @@ void ArrInserts::setze_dsp(int s, int m) {
     const float* alt = angewandt_[s];
     for (int b = 0; b < cypherdj::dsp::MultibandKompressor::kBaender; ++b) {
       const int o = 3 + b * INS_MB_BAND_PARAM;
-      if (!neu && std::memcmp(e + o, alt + o, sizeof(float) * INS_MB_BAND_PARAM) == 0) continue;   // setze_band only for a band that changed
+      const int u = INS_MB_AUF0 + b * INS_MB_AUF_PARAM;   // strand 13 slice 4: the upward rows of the band
+      if (!neu && std::memcmp(e + o, alt + o, sizeof(float) * INS_MB_BAND_PARAM) == 0 && std::memcmp(e + u, alt + u, sizeof(float) * INS_MB_AUF_PARAM) == 0) continue;   // setze_band only for a band that changed
       cypherdj::dsp::MbBandEinstellung be;   // aufholen_auto stays on (the module default and the mixer's): compressing a band makes it denser, not quieter
       be.schwelle_db = e[o];
       be.verhaeltnis = e[o + 1];
@@ -609,6 +615,9 @@ void ArrInserts::setze_dsp(int s, int m) {
       be.knie_db = e[o + 4];
       be.aufholen_db = e[o + 5];
       be.umgehen = e[o + 6] >= 0.5f;
+      be.auf_schwelle_db = e[u];       // strand 13 slice 4: ratio 1 (the default of a project without the rows) leaves the band as before, bit-identical
+      be.auf_verhaeltnis = e[u + 1];
+      be.auf_bereich_db = e[u + 2];
       A.setze_band(static_cast<cypherdj::dsp::Band>(b), be);
       if (mb_gb_an_[i]) B.setze_band(static_cast<cypherdj::dsp::Band>(b), be);
     }
@@ -646,6 +655,24 @@ void ArrInserts::setze_dsp(int s, int m) {
     q.setze_abklingen_ms(e[2]);
   }
   std::memcpy(angewandt_[s] + 1, e + 1, sizeof(float) * static_cast<size_t>(n - 1));
+  gesetzt_[s] = true;
+}
+
+// strand 13 slice 1: a komp slot. setze() only when one of the values 1..8 changed (the block of today, so an old project stays bit-identical), setze_charakter() only when
+// glue or auto changed (the first block always: a new owner starts with the switches of its rows, a slot taken over from a glue stage loses glue).
+void ArrInserts::setze_komp(int s, int m) {
+  float e[INS_KOMP_PARAM];
+  for (int k = 1; k < INS_KOMP_SC; ++k) e[k] = eff(s, k, m);
+  e[INS_KOMP_SC] = 0.0f;
+  e[INS_KOMP_GLUE] = eff(s, INS_KOMP_GLUE, m) >= 0.5f ? 1.0f : 0.0f;
+  e[INS_KOMP_AUTO] = eff(s, INS_KOMP_AUTO, m) >= 0.5f ? 1.0f : 0.0f;
+  const bool neu = !gesetzt_[s];
+  const float* alt = angewandt_[s];
+  if (neu || std::memcmp(e + 1, alt + 1, sizeof(float) * (INS_KOMP_SC - 1)) != 0)
+    komp_[s]->setze(CypherKompEinstellung{e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8]});
+  if (neu || e[INS_KOMP_GLUE] != alt[INS_KOMP_GLUE] || e[INS_KOMP_AUTO] != alt[INS_KOMP_AUTO])
+    komp_[s]->setze_charakter(e[INS_KOMP_GLUE] >= 0.5f, e[INS_KOMP_AUTO] >= 0.5f);
+  std::memcpy(angewandt_[s] + 1, e + 1, sizeof(float) * (INS_KOMP_PARAM - 1));
   gesetzt_[s] = true;
 }
 
@@ -735,7 +762,28 @@ void ArrInserts::rechne(int s, float* l, float* r, int m, bool ziel_an, float* t
     gate_[i]->verarbeite(l, r, l, r, m);   // in place, detection on its own input (no sidechain)
     gate_lief_[i] = true;
   } else if (s < INS_G_TRANS0) {
-    rechne_mb(s - INS_G_MB0, l, r, m, a);
+    // strand 13 slice 4: the key of the mb stage, as the compressor's (structural first, then the row sc); all three bands detect their reduction on it. No key: the plain block (unchanged).
+    const int k = ins_schl_index(s);
+    const float* kl = nullptr;
+    const float* kr = nullptr;
+    int verz = 0;
+    if (strukt_[k]) {
+      const size_t o = static_cast<size_t>(k) * INS_BLOCK;
+      kl = &key_l_[o];
+      kr = &key_r_[o];
+      verz = verz_s_[k];
+    }
+#ifndef CYPHERDJ_MUTATION_INS_MB_SC_IGNORIERT   // error case: the row key of an mb stage is ignored, its bands detect on the stage input
+    else if (sc_[k] > 0) {
+      const size_t o = static_cast<size_t>(sc_[k] - 1) * INS_BLOCK;
+      kl = &schl_l_[o];
+      kr = &schl_r_[o];
+      verz = verz_z_[k];
+    }
+#endif
+    if (!kl) ring_leere(s);   // the stage runs on its own signal: no key history
+    else schluessel_ausrichten(k, verz, kl, kr, m, &kl, &kr);
+    rechne_mb(s - INS_G_MB0, l, r, m, a, kl, kr);
   } else {
     // strand 5 slice 3: in place. A non-finite input sample passes untouched (the modules would count it as 0 and so hide a NaN that a stage before holds), so the guard in stufe() sees it
     for (int t = 0; t < m; ++t)
@@ -753,7 +801,7 @@ void ArrInserts::rechne(int s, float* l, float* r, int m, bool ziel_an, float* t
 // like one that arrives during the crossfade: it is read again when the change is over. At most one extra module call per block (the resting object), no allocation.
 // A non-finite input sample passes untouched (the module would count it as 0 and so hide a NaN that a stage before holds), so the guard in stufe() sees it; its reset (mb_leere) makes the next
 // block give the newest crossovers to the active object at once, so a change in that block is not lost.
-void ArrInserts::rechne_mb(int i, float* l, float* r, int m, ArrArbeit* a) {
+void ArrInserts::rechne_mb(int i, float* l, float* r, int m, ArrArbeit* a, const float* kl, const float* kr) {
   for (int t = 0; t < m; ++t)
     if (!std::isfinite(l[t]) || !std::isfinite(r[t])) return;
   cypherdj::dsp::MultibandKompressor& A = *mb_[i][mb_b_[i] ? 1 : 0];
@@ -793,7 +841,7 @@ void ArrInserts::rechne_mb(int i, float* l, float* r, int m, ArrArbeit* a) {
   }
   mb_lief_[i] = true;
   if (!mb_gb_an_[i]) {
-    A.verarbeite(l, r, l, r, m);
+    A.verarbeite(l, r, l, r, m, kl, kr);
     return;
   }
   if (mb_gwarm_[i] == 0 && !mb_gdyn_[i]) {   // the crossfade starts with this block: now the dynamics of the active object go over (settings, detector states, gain ramps)
@@ -802,8 +850,8 @@ void ArrInserts::rechne_mb(int i, float* l, float* r, int m, ArrArbeit* a) {
   }
   float* const bl = a->bke_l[0];
   float* const br = a->bke_r[0];
-  B.verarbeite(l, r, bl, br, m);   // first: it reads the input that A overwrites
-  A.verarbeite(l, r, l, r, m);
+  B.verarbeite(l, r, bl, br, m, kl, kr);   // first: it reads the input that A overwrites; strand 13 slice 4: both objects hear the same key
+  A.verarbeite(l, r, l, r, m, kl, kr);
   if (mb_gwarm_[i] > 0) {   // warming up: B runs but is not heard
     mb_gwarm_[i] = mb_gwarm_[i] > m ? mb_gwarm_[i] - m : 0;
     mb_gwarm_ges_[i] += m;
@@ -985,9 +1033,13 @@ void ArrInserts::stufe(int s, bool ziel_an, float* l, float* r, int m, ArrArbeit
     gr_[s] = std::min(std::max(0.0f, -gate_[s - INS_G_GATE0]->gain_db()), -boden);
   } else if (s >= INS_G_MB0 && s < INS_G_TRANS0) {
     const int i = s - INS_G_MB0;
-    const cypherdj::dsp::MultibandKompressor& A = *mb_[i][mb_b_[i] ? 1 : 0];
+    cypherdj::dsp::MultibandKompressor& A = *mb_[i][mb_b_[i] ? 1 : 0];
     float g = 0.0f;
-    for (int b = 0; b < cypherdj::dsp::MultibandKompressor::kBaender; ++b) g = std::max(g, -A.aktuelle_absenkung_db(static_cast<cypherdj::dsp::Band>(b)));
+    for (int b = 0; b < cypherdj::dsp::MultibandKompressor::kBaender; ++b) {
+      g = std::max(g, -A.aktuelle_absenkung_db(static_cast<cypherdj::dsp::Band>(b)));
+      gr_band_[i][b] = A.groesste_aenderung_db(static_cast<cypherdj::dsp::Band>(b));   // strand 13 slice 4: signed, the larger of reduction (positive) and lift (negative), read and reset per block
+      if (mb_gb_an_[i]) mb_[i][mb_b_[i] ? 0 : 1]->groesste_aenderung_db(static_cast<cypherdj::dsp::Band>(b));   // the resting object starts its readings fresh when it takes over
+    }
     gr_[s] = g;   // the deepest band, >= 0
   } else if (s >= INS_G_TRANS0 && s < INS_G_BILD0) {
     gr_[s] = trans_[s - INS_G_TRANS0]->groesste_aenderung_db();   // strand 5 slice 3: the largest |gain change| of the block, dB >= 0 (read and reset)

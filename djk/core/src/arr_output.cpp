@@ -83,6 +83,13 @@ bool ins_zeile(const sw::ReglerDef& d, int* slot, int* param) {
     }
     return true;
   }
+  if (r == sw::Rolle::ins_komp_glue || r == sw::Rolle::ins_komp_auto) {   // strand 13 slice 1: ins/komp/<n>/{glue,auto} (parameters 10, 11), the last roles
+    const int n = ins_nr(d.pfad, "ins/komp/", ARR_INS_KOMP, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::komp, n - 1);
+    *param = r == sw::Rolle::ins_komp_glue ? INS_KOMP_GLUE : INS_KOMP_AUTO;
+    return true;
+  }
   if (r == sw::Rolle::ins_eq_sc) {   // strand 5 slice 4: ins/eq/<n>/sc, the key row of the stage (parameter 85), the last role
     const int n = ins_nr(d.pfad, "ins/eq/", ARR_INS_EQ, &rest);
     if (n < 1) return false;
@@ -114,6 +121,13 @@ bool ins_zeile(const sw::ReglerDef& d, int* slot, int* param) {
     if (n < 1) return false;
     *slot = ins_global(ArrInsArt::saett, n - 1);
     *param = r == sw::Rolle::ins_saett_kurve ? 4 : 5;
+    return true;
+  }
+  if (r == sw::Rolle::ins_saett_knie) {   // strand 13 slice 2: the knee of the Hard curve (parameter 6), the last role
+    const int n = ins_nr(d.pfad, "ins/saett/", ARR_INS_SAETT, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::saett, n - 1);
+    *param = INS_SAETT_KNIE;
     return true;
   }
   if (r >= sw::Rolle::ins_lim_an && r <= sw::Rolle::ins_lim_abklingen) {   // the limiter roles come after rack_m4, so they need their own branch
@@ -153,6 +167,18 @@ bool ins_zeile(const sw::ReglerDef& d, int* slot, int* param) {
     } else {   // "b<m>/<name>"
       if (rest[0] != 'b' || rest[1] < '1' || rest[1] > '3' || rest[2] != '/') return false;
       *param = 3 + (rest[1] - '1') * INS_MB_BAND_PARAM + (static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_mb_b_schwelle));
+    }
+    return true;
+  }
+  if (r >= sw::Rolle::ins_mb_u_schwelle && r <= sw::Rolle::ins_mb_sc) {   // strand 13 slice 4: ins/mb/<n>/u<m>/{schwelle,ratio,bereich} (24 + (m - 1) * 3 + 0..2) and ins/mb/<n>/sc (33), the last roles
+    const int n = ins_nr(d.pfad, "ins/mb/", ARR_INS_MB, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::mb, n - 1);
+    if (r == sw::Rolle::ins_mb_sc) {
+      *param = INS_MB_SC;
+    } else {   // "u<m>/<name>", m = 1..3
+      if (rest[0] != 'u' || rest[1] < '1' || rest[1] > '3' || rest[2] != '/') return false;
+      *param = INS_MB_AUF0 + (rest[1] - '1') * INS_MB_AUF_PARAM + (static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_mb_u_schwelle));
     }
     return true;
   }
@@ -221,7 +247,9 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
         (d.rolle >= sw::Rolle::ins_gate_an && d.rolle <= sw::Rolle::ins_mb_b_umgehen) ||
         d.rolle == sw::Rolle::ins_saett_kurve || d.rolle == sw::Rolle::ins_saett_decke ||
         (d.rolle >= sw::Rolle::ins_eq_d_dyn && d.rolle <= sw::Rolle::ins_eq_dyn_release) ||
-        (d.rolle >= sw::Rolle::ins_trans_an && d.rolle <= sw::Rolle::ins_bild_mono_unter) || d.rolle == sw::Rolle::ins_eq_sc) {   // strand 5 slice 4: the eq key row   // strand 5 slice 3: trans and bild   // strand 5 slice 2: the dynamic EQ rows   // strand 5 slice 1: saett kurve and decke   // strand 1 slice 4: gate and mb   // 1.10 slice 4a/4b + limiter + plan 1.11 host + arr-fx utility: the pooled insert rows (komp, eq, saett, lim, host, utility)
+        (d.rolle >= sw::Rolle::ins_trans_an && d.rolle <= sw::Rolle::ins_bild_mono_unter) || d.rolle == sw::Rolle::ins_eq_sc ||
+        d.rolle == sw::Rolle::ins_komp_glue || d.rolle == sw::Rolle::ins_komp_auto || d.rolle == sw::Rolle::ins_saett_knie ||
+        (d.rolle >= sw::Rolle::ins_mb_u_schwelle && d.rolle <= sw::Rolle::ins_mb_sc)) {   // strand 13 slice 4: mb upward and key   // strand 13 slice 2: saett knie   // strand 13 slice 1: komp glue and auto   // strand 5 slice 4: the eq key row   // strand 5 slice 3: trans and bild   // strand 5 slice 2: the dynamic EQ rows   // strand 5 slice 1: saett kurve and decke   // strand 1 slice 4: gate and mb   // 1.10 slice 4a/4b + limiter + plan 1.11 host + arr-fx utility: the pooled insert rows (komp, eq, saett, lim, host, utility)
       int slot = 0, param = 0;
       if (ins_zeile(d, &slot, &param)) {
         regler_ins_[r] = static_cast<int32_t>(slot * INS_PARAM_MAX + param);

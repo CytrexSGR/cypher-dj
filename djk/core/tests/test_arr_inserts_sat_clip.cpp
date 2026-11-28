@@ -4,7 +4,11 @@
 // 2 hart_decke (rows through the arrangement: kurve 2, decke -6, drive 24 on a near full-scale sine; the stage peak stays within 1.25 * 0.501 * out of the
 //   level the PM shows without the stage; 1.25, not 1.12: the 2x half-band overshoots after the curve, task 1.1 measured that bound for tanh too;
 //   negative control: Tanh with decke 0 goes above it), 3 clip_gr (gr > 0 while clipping, exactly 0 at drive 0 on a -20 dBFS sine),
-// 4 zeilen (the table has ins/saett/1/kurve and ins/saett/4/decke with the contract ranges, none for slot 5; the parameter count of a saett slot is 6).
+// 4 zeilen (the table has ins/saett/1/kurve and ins/saett/4/decke with the contract ranges, none for slot 5; the parameter count of a saett slot is 7).
+// Strand 13 slice 2 (task 2.2): the pool object clips Soft and Hard at 8x and has a knee row ins/saett/<n>/knie (parameter 6, dB 0..12, default 0).
+// 5 pool_latenz (ins_latenz(saett) is saett_dsp::LATENZ_POOL = 80, from the module, within INS_LAT_MAX), 6 knie (Hard, drive 12, ceiling -6 dB, knie 6:
+//   the block peak stays within 1.12 * ceiling * out; a quiet sine below the knee start comes out as with knie 0 (the curve is linear there);
+//   negative control: at full level knie 6 differs from knie 0), 7 knie_zeilen (ins/saett/1/knie and ins/saett/32/knie exist with the contract range).
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -78,6 +82,8 @@ struct Modul {
     const float w[6] = {1.0f, drive, out, mix, kurve, decke};
     for (int k = 0; k < 6; ++k) setze(k, w[k]);
   }
+  // strand 13 slice 2: the knee row (parameter 6); a stage that never gets it runs with 0, as a project from before the row
+  void knie(float db) { setze(cdj::INS_SAETT_KNIE, db); }
   void block() {
     if (!getauscht) ins->tausche(ketten.get());
     getauscht = true;
@@ -202,8 +208,82 @@ int main() {
     const auto& dd = tab.def(d4);
     PRUEF(dk.rolle == cypherdj::stellwerk::Rolle::ins_saett_kurve && dk.min == 0.0f && dk.max == 2.0f && dk.vorgabe == 0.0f);
     PRUEF(dd.rolle == cypherdj::stellwerk::Rolle::ins_saett_decke && dd.min == -24.0f && dd.max == 0.0f && dd.vorgabe == 0.0f);
-    PRUEF(cdj::INS_SAETT_PARAM == 6);
+    PRUEF(cdj::INS_SAETT_PARAM == 7);   // knie since strand 13 slice 2 (6 before)
     std::printf("4: rows ins/saett/1/kurve %d, ins/saett/4/decke %d, table %d rows\n", k1, d4, tab.anzahl());
+  }
+
+  {  // 5 pool_latenz: the arrangement's saturator is the pool object (saett_dsp::LATENZ_POOL = 69 + the two short half-band stages), the plugin keeps 69
+    constexpr int LATENZ_POOL = 80;
+    const int modul = cdj::SaettNativ().latenz();
+    const int art = cdj::ins_latenz(ArrInsArt::saett);
+    std::printf("5: saett latency: kind %d, module %d (LATENZ_POOL %d, INS_LAT_MAX %d)\n", art, modul, LATENZ_POOL, cdj::INS_LAT_MAX);
+    PRUEF(art == LATENZ_POOL);
+    PRUEF(modul == LATENZ_POOL);
+    PRUEF(cdj::ins_latenz(ArrStufe{ArrInsArt::saett, 3, true}) == LATENZ_POOL);   // the stage overload, any slot
+    PRUEF(LATENZ_POOL <= cdj::INS_LAT_MAX);
+  }
+
+  {  // 6 knie: Hard at drive 12 dB, ceiling -6 dB, out 0 dB, mix 1, through the pool stage (8x path)
+    const double c = std::pow(10.0, -6.0 / 20.0), out = 1.0;
+    const double k = std::min(0.75, 1.0 - std::pow(10.0, -6.0 / 20.0));   // D8: the knee half-width relative to the ceiling, 0.499 at 6 dB
+    const double gain = std::pow(10.0, 12.0 / 20.0);
+    auto lauf = [&](float knie, float amp, double* spitze_ab, std::vector<float>* aus) {
+      Modul x;
+      x.stelle(12.0f, 0.0f, 1.0f, 2.0f, -6.0f);
+      if (knie >= 0.0f) x.knie(knie);
+      double ph = 0.0, sp = 0.0;
+      for (int blk = 0; blk < 200; ++blk) {
+        for (int t = 0; t < Modul::M; ++t) {
+          x.l[t] = x.r[t] = amp * static_cast<float>(std::sin(ph));
+          ph += 2.0 * 3.14159265358979323846 * 220.0 / 48000.0;
+        }
+        x.block();
+        if (blk >= 20) {   // the 10 ms ramps and the entry blend are over
+          for (int t = 0; t < Modul::M; ++t) sp = std::max(sp, static_cast<double>(std::fabs(x.l[t])));
+          if (aus) aus->insert(aus->end(), x.l, x.l + Modul::M);
+        }
+      }
+      *spitze_ab = sp;
+    };
+    double p6 = 0.0, p0 = 0.0;
+    std::vector<float> laut6, laut0;
+    lauf(6.0f, 0.9f, &p6, &laut6);
+    lauf(0.0f, 0.9f, &p0, &laut0);
+    double d_laut = 0.0;
+    for (size_t i = 0; i < laut6.size(); ++i) d_laut = std::max(d_laut, static_cast<double>(std::fabs(laut6[i] - laut0[i])));
+    // below the knee start (1 - k of the ceiling): the driven peak is 0.8 * (1 - k) * c, the curve is the identity there, so knie 6 equals knie 0 (and the unset row)
+    const float leise_amp = static_cast<float>(0.8 * (1.0 - k) * c / gain);
+    double q6 = 0.0, q0 = 0.0, qu = 0.0;
+    std::vector<float> leise6, leise0, leise_u;
+    lauf(6.0f, leise_amp, &q6, &leise6);
+    lauf(0.0f, leise_amp, &q0, &leise0);
+    lauf(-1.0f, leise_amp, &qu, &leise_u);   // the row never set: a project from before strand 13 slice 2
+    double d_leise = 0.0, d_alt = 0.0;
+    for (size_t i = 0; i < leise6.size(); ++i) {
+      d_leise = std::max(d_leise, static_cast<double>(std::fabs(leise6[i] - leise0[i])));
+      d_alt = std::max(d_alt, static_cast<double>(std::fabs(leise_u[i] - leise0[i])));
+    }
+    const double lin = 0.8 * (1.0 - k) * c * out;   // the expected peak of the linear part: input * drive * out
+    std::printf("6: knie 6 peak %.4f (bound %.4f = 1.12 * %.4f * out), knie 0 peak %.4f, largest difference at 0.9 %.4f; below the knee (k %.3f): peak %.5f "
+                "(linear %.5f), knie 6 vs 0 %.2e, unset vs 0 %.2e\n", p6, 1.12 * c * out, c, p0, d_laut, k, q6, lin, d_leise, d_alt);
+    PRUEF(p6 <= 1.12 * c * out);
+    PRUEF(p6 > 0.8 * c * out);          // it sounds, near the ceiling
+    PRUEF(d_laut > 0.01);               // negative control: the knee changes the loud signal
+    PRUEF(d_leise <= 1e-6 * lin);       // the curve is linear below the knee start: knie 6 = knie 0
+    PRUEF(std::fabs(q6 - lin) <= 0.02 * lin);
+    PRUEF(d_alt == 0.0);                // an old project (no knie row) sounds exactly as knie 0
+  }
+
+  {  // 7 knie_zeilen: the row of every slot, parameter 6, the contract range
+    cypherdj::stellwerk::ReglerTabelle tab;
+    const int r1 = tab.suche("ins/saett/1/knie"), r32 = tab.suche("ins/saett/32/knie");
+    PRUEF(r1 >= 0 && r32 >= 0);
+    PRUEF(tab.suche("ins/saett/33/knie") < 0);
+    PRUEF(r1 == tab.suche("ins/saett/1/decke") + 1);   // knie follows decke of the same instance
+    const auto& d = tab.def(r32);
+    PRUEF(d.rolle == cypherdj::stellwerk::Rolle::ins_saett_knie && d.min == 0.0f && d.max == 12.0f && d.vorgabe == 0.0f && !d.ganzzahlig);
+    std::printf("7: rows ins/saett/1/knie %d, ins/saett/32/knie %d, table %d rows\n", r1, r32, tab.anzahl());
+    PRUEF(tab.anzahl() == 23638);   // 23 526 since strand 13 slice 1, + 32 knie rows, + 80 mb rows (key and upward, slice 3)
   }
 
   PRUEF_ENDE();

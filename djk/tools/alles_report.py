@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Helper of alles.sh: parse suite logs, apply the quarantine list, write SUMMARY.md.
 
-    alles_report.py --ziel DIR --quarantaene FILE [--nicht-gelaufen "suite: reason" ...] [--erwartet "suite suite ..."] [--skips FILE]
+    alles_report.py --ziel DIR [DIR ...] --quarantaene FILE [--nicht-gelaufen "suite: reason" ...] [--erwartet "suite suite ..."] [--skips FILE]
+
+Several result folders (the pool and the parallel packages of the quiet stage, djk/tools/ci/ruhig_pakete.sh) are merged into one report written to the FIRST folder:
+suites, failures, flaky reruns (each folder's own rerun/), load skips and notes are collected over all of them, the skip ceilings count over all rows, --erwartet
+is checked against the union. A folder with neither a result file (.meta) nor a SUMMARY.md (its run never wrote anything) is a failure of its own.
 
 Reads <ziel>/<suite>.log plus <ziel>/<suite>.meta (lines `kind=...`, `seconds=...`, `exit=...`), writes <ziel>/SUMMARY.md.
 Exit 0: no failure outside the quarantine and nothing skipped for load. Exit 1: a failure outside it, a suite that was announced (--erwartet) but left
@@ -31,8 +35,9 @@ def parse_quarantaene(text):
 
 
 def grundsuite(suite):
-    """Suites that alles.sh splits keep one quarantine name: `ui-seriell-c` (a shard of the serial page tests) is `ui-seriell`, `core-langsam` (the slow stage) and `core-ruhig` (the quiet stage) are `core`, `ui-ruhig` is `ui-seite`, `generator-ruhig` is `generator`."""
-    suite = {"ui-ruhig": "ui-seite", "generator-ruhig": "generator"}.get(suite, suite)
+    """Suites that alles.sh splits keep one quarantine name: `ui-seriell-c` (a shard of the serial page tests) is `ui-seriell`, `core-langsam` (the slow stage) and `core-ruhig` (the quiet stage) are `core`, `ui-ruhig` and the packages `ui-ruhig-<n>` are `ui-seite`, `generator-ruhig` is `generator`."""
+    suite = re.sub(r"^ui-ruhig(-\d+)?$", "ui-seite", suite)   # ui-ruhig-<n>: package n of the parallel quiet stage
+    suite = {"generator-ruhig": "generator"}.get(suite, suite)
     return re.sub(r"^(ui-seriell)-[a-h]$|^(core)-(?:langsam|ruhig)$", lambda m: m.group(1) or m.group(2), suite)
 
 
@@ -374,9 +379,34 @@ def schreibe_summary(ziel, rows, harte, quar, nicht_gelaufen=(), last=None, noti
     (Path(ziel) / "flaky.txt").write_text("".join(f"{s}\t{n}\n" for s, ns in flaky.items() for n in ns))
 
 
+def sammle(ziele, quarantaene, erwartet=()):
+    """-> (rows, harte, quar, last, flaky, notizen) over several result folders (see the module doc). One folder: exactly what auswerten says plus the CAP note."""
+    rows, harte, quar, last, flaky, notizen = [], {}, {}, {}, {}, []
+    vorhanden = set()
+    for ziel in ziele:
+        z = Path(ziel)
+        metas = list(z.glob("*.meta"))
+        if len(ziele) > 1 and not metas and not (z / "SUMMARY.md").exists():
+            harte.setdefault(f"folder {z.name}", []).append(f"no result in {z} (no .meta, no SUMMARY.md: its run wrote nothing)")
+        r, h, q, l, f = auswerten(ziel, quarantaene, ())
+        vorhanden |= {m.stem for m in metas}
+        rows += r
+        for ziel_dict, quelle in ((harte, h), (quar, q), (last, l), (flaky, f)):
+            for k, v in quelle.items():
+                ziel_dict.setdefault(k, []).extend(v)
+        cap = z / "rerun" / "CAP"
+        if cap.exists():
+            notizen.append(f"{cap.read_text().strip()} failed units, more than {RERUN_GRENZE}: no rerun (a real breakage, not a flake)"
+                           + (f" ({z.name})" if len(ziele) > 1 else ""))
+    for suite in erwartet:
+        if suite not in vorhanden:
+            harte[suite] = ["suite did not run: no result file (.meta) was written"]
+    return rows, harte, quar, last, flaky, notizen
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ziel", required=True)
+    ap.add_argument("--ziel", required=True, nargs="+")
     ap.add_argument("--quarantaene", required=True)
     ap.add_argument("--nicht-gelaufen", action="append", default=[])
     ap.add_argument("--erwartet", default="", help="suites that must have a result (space separated)")
@@ -386,18 +416,18 @@ def main(argv=None):
     qf = Path(a.quarantaene)
     q = parse_quarantaene(qf.read_text()) if qf.exists() else []
     if a.rerun_plan:
-        plan, gesamt, cap = rerun_plan(a.ziel, q)
-        schreibe_rerun(a.ziel, plan)
+        if len(a.ziel) != 1:
+            print("alles_bericht: --rerun-plan takes exactly one --ziel", file=sys.stderr)
+            return 2
+        ziel = a.ziel[0]
+        plan, gesamt, cap = rerun_plan(ziel, q)
+        schreibe_rerun(ziel, plan)
         if cap:
-            (Path(a.ziel) / "rerun" / "CAP").write_text(f"{gesamt}\n")
+            (Path(ziel) / "rerun" / "CAP").write_text(f"{gesamt}\n")
         for suite, e in plan.items():
             print(suite, e["kind"])
         return 0
-    rows, harte, quar, last, flaky = auswerten(a.ziel, q, a.erwartet.split())
-    notizen = []
-    cap = Path(a.ziel) / "rerun" / "CAP"
-    if cap.exists():
-        notizen.append(f"{cap.read_text().strip()} failed units, more than {RERUN_GRENZE}: no rerun (a real breakage, not a flake)")
+    rows, harte, quar, last, flaky, notizen = sammle(a.ziel, q, a.erwartet.split())
     if flaky:
         notizen.append("flaky: " + ", ".join(f"{s}: {len(n)}" for s, n in flaky.items()) + " (see the Flaky section)")
     if a.skips:
@@ -406,8 +436,8 @@ def main(argv=None):
         notizen += mehr
         for g, ms in sh.items():
             harte.setdefault(g, []).extend(ms)
-    schreibe_summary(a.ziel, rows, harte, quar, a.nicht_gelaufen, last, notizen, flaky)
-    print((Path(a.ziel) / "SUMMARY.md").read_text())
+    schreibe_summary(a.ziel[0], rows, harte, quar, a.nicht_gelaufen, last, notizen, flaky)
+    print((Path(a.ziel[0]) / "SUMMARY.md").read_text())
     return 1 if (harte or a.nicht_gelaufen) else (3 if last else 0)
 
 

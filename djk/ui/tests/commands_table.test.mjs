@@ -17,6 +17,11 @@ import { CONTAINER } from '../project/commands_container.ts';
 import { AUDIO_NOTEN } from '../project/commands_audio_notes.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { mergeTabellen, PRO_BEFEHL as REGISTER } from '../project/commands_helpers.ts';
+import fs from 'node:fs';
+import { pinText } from './support/pins.mjs';
+
+// the counts live in djk/tests/zaehlstaende.json (djk/tools/zaehlstaende.mjs computes them from the code; djk/tools/pins_follow_up.sh rewrites them)
+const ZAHLEN = JSON.parse(fs.readFileSync(new URL('../../tests/zaehlstaende.json', import.meta.url), 'utf8'));
 
 test('mergeTabellen: returns the target itself with the keys of every table', () => {
   const f = () => {}, g = () => {};
@@ -91,9 +96,11 @@ const NAMEN_ALLE = [...NAMEN_MAIN, ...NAMEN_SZENEN, ...NAMEN_TRACKER, ...NAMEN_A
   ...NAMEN_CONTAINER, ...NAMEN_SESSION, ...NAMEN_STECKFELD, ...NAMEN_AUDIO_NOTEN, ...NAMEN_ABGABE, ...NAMEN_ROLLE, ...NAMEN_MARKER, ...NAMEN_PLUGIN, ...NAMEN_MIDI, ...NAMEN_HARMONIE, ...NAMEN_MOD];
 
 test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands, the tracker command, the 8 time and section commands the 2 linked-clip commands and the effect command, the 8 loop deck commands, the 3 container commands, the 7 session commands, the 4 note editor commands, the release metadata command, the 2 piano roll tool commands and the 2 marker commands', () => {
-  assert.equal(NAMEN_MAIN.length, 82);
-  assert.equal(NAMEN_ALLE.length, 132);   // + the plugin knob command, + audio_noten_raster, + the MIDI stage command, + the harmony lane command, + the 3 modulator commands
+  assert.equal(NAMEN_MAIN.length, ZAHLEN.befehle_main, pinText('NAMEN_MAIN length differs from tests/zaehlstaende.json'));
+  assert.equal(NAMEN_ALLE.length, ZAHLEN.befehle_gesamt,
+    pinText('NAMEN_ALLE length differs from tests/zaehlstaende.json'));   // + the plugin knob command, + audio_noten_raster, + the MIDI stage command, + the harmony lane command, + the 3 modulator commands
   assert.deepEqual(Object.keys(PRO_BEFEHL).sort(), [...NAMEN_ALLE].sort());
+  assert.equal(Object.keys(PRO_BEFEHL).length, ZAHLEN.befehle_gesamt, pinText('registry size differs from tests/zaehlstaende.json'));
 });
 
 test('every command is defined in exactly one family table; BEFEHL_NAMEN is the key list of the registry', () => {

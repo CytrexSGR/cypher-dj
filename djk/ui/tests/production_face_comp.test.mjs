@@ -307,3 +307,93 @@ test('silence (-200) shows dashes and no dot; a bypassed stage shows dashes alth
   await s.post('/attrappe/sse', { a: '/e/stufe_pegel', f: { kanal: 'ins/komp/1', ein_db: -9.5, aus_db: -14 } });
   assert.equal(await s.w(`import('/effekte_gemeinsam.js').then((g) => g.kompPegel['ins/komp/1'] ?? null)`), null, 'an insert report does not land in the channel store');
 });
+
+// ---- strand 13 slice 1: the Cypher Glue mode
+import { glueStufe, GLUE_RATIO, GLUE_ATTACK, GLUE_RELEASE } from '../public/production/inserts.js';
+import { glueNadelWinkel } from '../public/face/comp.js';
+test('glueStufe: the nearest step in the log domain, a tie goes to the lower step (the rule of comp_dsp, tests/glue.rs)', () => {
+  assert.equal(glueStufe(GLUE_RATIO, 3), 4);   // |ln 3 - ln 4| = .288 < |ln 3 - ln 2| = .405
+  assert.equal(glueStufe(GLUE_ATTACK, 0.05), 0.1);
+  assert.equal(glueStufe(GLUE_RELEASE, 5000), 1200);
+  assert.equal(glueStufe(GLUE_RELEASE, 90), 100);
+  assert.equal(glueStufe(GLUE_RATIO, 1.2), 1.5);
+  assert.equal(glueStufe(GLUE_RATIO, 50), 10);
+  assert.equal(glueStufe(GLUE_ATTACK, 10), 10, 'an exact step stays');
+  assert.equal(glueStufe(GLUE_RATIO, Math.sqrt(2 * 4)), 2, 'the geometric mean of 2 and 4 is a tie: the lower step');
+  assert.equal(glueStufe(GLUE_RATIO, 2.8), 2, 'just below the tie stays low'); assert.equal(glueStufe(GLUE_RATIO, 2.9), 4, 'negative control: just above goes up');
+});
+test('glueNadelWinkel: 0 dB at the left end, 20 dB at the right end, a missing reading rests at 0', () => {
+  assert.equal(glueNadelWinkel(0), -55); assert.equal(glueNadelWinkel(20), 55); assert.equal(glueNadelWinkel(10), 0);
+  assert.equal(glueNadelWinkel(40), 55, 'clamped'); assert.equal(glueNadelWinkel(null), -55);
+});
+
+const GLUE_WERTE = [['i1', 'glue', 1], ['i1', 'schwelle', -16], ['i1', 'ratio', 3], ['i1', 'attack', 10], ['i1', 'release', 600]];
+const wahl = (s, n) => s.w(`document.querySelector('.p-face .fa-glue-${n}').value`);
+const stelle = (s, sel, v) => s.w(`(() => { const w = document.querySelector(${JSON.stringify(sel)}); w.value = ${JSON.stringify(v)}; w.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+
+test('glue face: title, snapped selectors, four knobs, the needle meter; glue 0 shows none of it', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  const s = await seite(t, projekt({ s1: 1 }, GLUE_WERTE));
+  await oeffneKlick(s);
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-komp-titel').textContent`), 'Cypher Glue');
+  assert.equal(await wahl(s, 'ratio'), '4', 'ratio 3 shows the snapped step 4:1');
+  assert.equal(await wahl(s, 'attack'), '10');
+  assert.equal(await wahl(s, 'release'), '800', '600 ms snaps to 800 (|ln 600-ln 800| .288 against .405 to 400)');
+  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-face .fp-name')].map((e) => e.textContent)`), ['Threshold', 'Makeup', 'Mix', 'Key high-pass']);
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-komp-meter').hidden`), true, 'the bar meter gives way to the needle');
+  const stopp = strom(s, 6.04);
+  assert.ok(await s.bis(async () => (await s.w(`document.querySelector('.p-face .fa-glue-text').textContent`)) === '6.0 dB'), 'the needle reads 6.0 dB');
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-glue-nadel').getAttribute('aria-valuenow')`), '6.0');
+  stopp();
+  const s2 = await seite(t, projekt({ s1: 1 }));   // negative control: a plain compressor is exactly today's face
+  await oeffneKlick(s2);
+  assert.equal(await zaehle(s2, '.p-face .fa-komp-titel'), 0); assert.equal(await zaehle(s2, '.p-face .fa-glue-wahl'), 0); assert.equal(await zaehle(s2, '.p-face .fp-knopf'), 8);
+});
+
+test('glue face: a selector writes the step; AUTO shows Auto in the release selector and disables it; AUTO again gives the release back', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  const s = await seite(t, projekt({ s1: 1 }, GLUE_WERTE));
+  await oeffneKlick(s);
+  await stelle(s, '.p-face .fa-glue-ratio', '2');
+  assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts[0].werte.ratio === 2), 'ratio 2 in the project');
+  assert.deepEqual((await aend(s)).at(-1).befehle, ['insert_param_setzen']);
+  await s.w(`document.querySelector('.p-face .fa-glue-auto').click()`);
+  assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts[0].werte.auto === 1), 'auto 1 in the project');
+  assert.ok(await s.bis(async () => (await wahl(s, 'release')) === 'auto'));
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-glue-release').disabled`), true);
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-glue-release').selectedOptions[0].textContent`), 'Auto');
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-glue-ratio').disabled`), false, 'negative control: only the release is disabled');
+  await s.w(`document.querySelector('.p-face .fa-glue-auto').click()`);
+  assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts[0].werte.auto === 0));
+  assert.ok(await s.bis(async () => (await wahl(s, 'release')) === '800'));
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-glue-release').disabled`), false);
+});
+
+test('glue face: STYLE Smash sends ONE proj_aendern with all the values of the recipe; the project holds them; one undo step', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  const s = await seite(t, projekt({ s1: 1 }, [...GLUE_WERTE, ['i1', 'auto', 1]]));
+  await oeffneKlick(s);
+  const vorher = (await aend(s)).length;
+  await stelle(s, '.p-face .fa-glue-stil', 'smash');
+  assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts[0].werte.makeup === 8), 'Smash makeup in the project');
+  const neu = (await aend(s)).slice(vorher);
+  assert.equal(neu.length, 1, 'one write for the whole style');
+  assert.deepEqual(neu[0].befehle, Array(9).fill('insert_param_setzen'), 'eight recipe values and auto 0');
+  const w = (await s.projekt()).spuren[0].inserts[0].werte;
+  assert.deepEqual([w.schwelle, w.ratio, w.attack, w.release, w.auto, w.knie, w.makeup, w.mix, w.schp, w.glue], [-30, 10, 0.1, 100, 0, 0, 8, 0.4, 0, 1]);
+  assert.equal((await (await fetch(`${s.url}proj/verlauf`)).json()).at(-1).label, 'Glue style Smash on Kick');
+  assert.equal(await wahl(s, 'ratio'), '10'); assert.equal(await s.w(`document.querySelector('.p-face .fa-glue-stil').value`), '', 'the STYLE selector goes back to its title');
+});
+
+test('the GLUE button of the master: lit and opening the face with a glue stage; else it inserts the Master recipe before the CLIP saturator and opens the face', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  let p = projekt({});
+  p = lauf(p, [{ befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'eq' }, { befehl: 'insert_setzen', strang_id: 'master', pos: 1, art: 'saett', werte: { kurve: 2 } }]);
+  p.rev = 1; p.wiedergabe_rev = 1;
+  const s = await seite(t, JSON.parse(JSON.stringify(p)));
+  assert.equal(await s.w(`document.querySelector('[data-w="karte-glue"]').getAttribute('aria-pressed')`), 'false');
+  await s.w(`document.querySelector('[data-w="karte-glue"]').click()`);
+  assert.ok(await s.bis(async () => (await s.projekt()).master.inserts.length === 3), 'a third stage on the master');
+  const ins = (await s.projekt()).master.inserts;
+  assert.deepEqual(ins.map((i) => i.art), ['eq', 'komp', 'saett'], 'the glue stage sits before the clipper');
+  assert.equal(ins[1].werte.glue, 1); assert.equal(ins[1].werte.ratio, 1.5); assert.equal(ins[1].werte.auto, 1);
+  assert.ok(await s.bis(async () => (await zaehle(s, FACE)) === 1), 'the face opens');
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-komp-titel').textContent`), 'Cypher Glue');
+  assert.ok(await s.bis(async () => (await s.w(`document.querySelector('[data-w="karte-glue"]').getAttribute('aria-pressed')`)) === 'true'), 'the button is lit now');
+});

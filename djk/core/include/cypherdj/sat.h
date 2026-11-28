@@ -1,4 +1,5 @@
-// Native saturation insert (Rust saett_dsp over hall_ffi): tanh with ADAA1, stereo in place, fixed latency (see cypher_sat_ffi.h).
+// Native saturation insert (Rust saett_dsp over hall_ffi): tanh, soft and hard clip with ADAA1, stereo in place, fixed latency
+// (see cypher_sat_ffi.h). It is the pool object (cypher_saett_neu_pool): soft and hard clip at 8x, latency 80 at 48 kHz.
 // RAII wrapper like comp.h: throws if the allocation fails, guards denormals around the block.
 #pragma once
 #include <stdexcept>
@@ -9,7 +10,7 @@ namespace cdj {
 
 class SaettNativ {
  public:
-  explicit SaettNativ(int sr = 48000) : h_(cypher_saett_neu(sr)) {
+  explicit SaettNativ(int sr = 48000) : h_(cypher_saett_neu_pool(sr)) {
     if (!h_) throw std::runtime_error("Cypher Saett: Anlegen gescheitert");
   }
   ~SaettNativ() { cypher_saett_frei(h_); }
@@ -21,6 +22,7 @@ class SaettNativ {
   }
   void setze(double drive_db, double ausgang_db, double mix) { cypher_saett_setze(h_, drive_db, ausgang_db, mix); }
   void setze_form(int kurve, double decke_db) { cypher_saett_setze_form(h_, static_cast<uint8_t>(kurve < 0 ? 255 : kurve), decke_db); }
+  void setze_knie(double knie_db) { cypher_saett_setze_knie(h_, knie_db); }
   float clip_db() { return cypher_saett_clip_db(h_); }
   void leeren() { cypher_saett_leeren(h_); }
   int latenz() const { return static_cast<int>(cypher_saett_latenz(h_)); }

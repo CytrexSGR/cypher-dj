@@ -23,8 +23,8 @@ test('V2 Gründe: die Extraktion findet bekannte Gründe aus jeder Quelle (Posit
   const wo = (x) => [...(g.get(x) ?? [])].join(' | ');
   for (const [x, quelle] of [['clip_unbekannt', 'ab project/commands_helpers.ts'], ['slot_belegt', 'ab project/commands_helpers.ts'], ['projekt_busy', 'AblageFehler'],
     ['nichts_zu_tun', 'VerlaufFehler'], ['quelle_ungueltig', 'DekodierFehler'], ['op_unbekannt', 'PatchFehler'], ['beschaeftigt', 'ProjFehler'],
-    ['koerper_zu_gross', 'ProjFehler'], ['katalog_kaputt', 'KatalogFehler'], ['datei_fehlt', 'WiedergabeFehler'], ['tempo_abgelehnt', 'literal areas/proj/session.ts'],
-    ['rampe_haengt', 'literal'], ['marker_unbekannt', 'WarpFehler'], ['intern', 'literal areas/proj/area.ts'], ['kein_kern', 'BEREICH_GRUENDE'], ['ueber_projekt', 'genannt server.ts'],
+    ['koerper_zu_gross', 'ProjFehler'], ['katalog_kaputt', 'KatalogFehler'], ['datei_fehlt', 'WiedergabeFehler'], ['tempo_abgelehnt', 'literal areas/proj/session_transport.ts'],
+    ['rampe_haengt', 'literal'], ['marker_unbekannt', 'WarpFehler'], ['intern', 'literal areas/proj/area.ts'], ['kein_kern', 'BEREICH_GRUENDE'], ['ueber_projekt', 'genannt areas/spur/run.ts'],
     ['nur_json', 'literal http/transport.ts'], ['fremde_herkunft', 'literal http/transport.ts'], ['stems_loop', 'ab project/stems.ts']]) {
     assert.ok(wo(x).includes(quelle), `${x} aus ${quelle} gefunden (gefunden: ${wo(x) || 'nichts'})`);
   }

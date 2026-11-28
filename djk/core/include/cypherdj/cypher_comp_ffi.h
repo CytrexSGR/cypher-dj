@@ -2,6 +2,7 @@
 // neu allokiert (außerhalb des Callbacks); block, setze, leeren, gr_db allokieren nicht. block arbeitet in place.
 #pragma once
 #include <cstddef>
+#include <cstdint>
 
 extern "C" {
 struct CypherKomp;
@@ -11,6 +12,7 @@ struct CypherKompEinstellung {
 CypherKomp* cypher_komp_neu(double fs);
 void cypher_komp_frei(CypherKomp* h);
 void cypher_komp_setze(CypherKomp* h, CypherKompEinstellung e);
+void cypher_komp_setze_charakter(CypherKomp* h, uint8_t glue, uint8_t auto_rel);   // Glue (stepped ratio/attack/release) and auto release; > 1 counts as 1
 void cypher_komp_leeren(CypherKomp* h);
 double cypher_komp_gr_db(const CypherKomp* h);
 void cypher_komp_block(CypherKomp* h, float* l, float* r, size_t n);

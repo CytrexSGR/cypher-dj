@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { handQuelle } from './support/hand_source.mjs';
 
 const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'hand.ts');
 
@@ -142,5 +143,5 @@ test('the schema and the description', async (t) => {
 test('the tool count is the number of entries in hand.ts', async (t) => {
   const { c } = await verbinde(t, () => [200, {}]);
   assert.equal((await c.listTools()).tools.length, WERKZEUGE_IM_CODE);
-  assert.equal(fs.readFileSync(HAND, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length, WERKZEUGE_IM_CODE);
+  assert.equal(handQuelle().split('\n').filter((z) => z.startsWith("  { name: '")).length, WERKZEUGE_IM_CODE);
 });

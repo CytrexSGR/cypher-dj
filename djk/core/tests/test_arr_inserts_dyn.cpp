@@ -268,7 +268,7 @@ int main() {
     PRUEF((cdj::ARR_INS_MB) == (8));
     PRUEF((cdj::ARR_INS_LIM) == (8));
     PRUEF((cdj::INS_GATE_PARAM) == (8));
-    PRUEF((cdj::INS_MB_PARAM) == (24));
+    PRUEF((cdj::INS_MB_PARAM) == (34));   // strand 13 slice 4: 24 + the upward rows u1..u3 (9) + sc
     PRUEF((cdj::ins_latenz(ArrInsArt::gate)) == (0));
     PRUEF((cdj::ins_latenz(ArrInsArt::mb)) == (0));
     PRUEF((cdj::INS_G_GATE0) == (cdj::INS_G_BK0 + cdj::ARR_INS_BK));

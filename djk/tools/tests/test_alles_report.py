@@ -324,3 +324,90 @@ def test_a_failing_doc_test_is_not_rerun(tmp_path):
     _lauf(tmp_path, "instruments", "cargo", cargo, 101)
     _plan_und_bericht(tmp_path)
     assert (tmp_path / "rerun" / "plan.txt").read_text() == ""
+
+
+# ---- several result folders: the pool and the parallel packages of the quiet stage ------------------------------------------------------
+
+def _ordner(tmp_path, name):
+    d = tmp_path / name
+    d.mkdir()
+    return d
+
+
+def test_the_quiet_page_packages_use_the_quarantine_name_and_skip_ceiling_of_ui_seite():
+    assert ab.grundsuite("ui-ruhig-3") == "ui-seite" and ab.grundsuite("ui-ruhig") == "ui-seite" and ab.grundsuite("ui-ruhig-x") == "ui-ruhig-x"
+    assert ab.ist_quarantaene("ui-ruhig-2", ("case", "tests/a.test.mjs"), [("ui-seite", "tests/a.test.mjs")])
+
+
+def test_merged_folders_give_one_summary_in_the_first_folder(tmp_path):
+    pool, p1, p2 = (_ordner(tmp_path, n) for n in ("pool", "ruhig-1", "ruhig-2"))
+    _suite(pool, "hand", "node", 0, "# pass 3\n# fail 0\n# skipped 0\n")
+    _suite(p1, "ui-ruhig-1", "node", 0, "# pass 5\n# fail 0\n# skipped 0\n")
+    _suite(p2, "ui-ruhig-2", "node", 0, "# pass 7\n# fail 0\n# skipped 0\n")
+    assert ab.main(["--ziel", str(pool), str(p1), str(p2), "--quarantaene", _q(tmp_path)]) == 0
+    md = (pool / "SUMMARY.md").read_text()
+    assert "| hand | 3 |" in md and "| ui-ruhig-1 | 5 |" in md and "| ui-ruhig-2 | 7 |" in md
+    assert "Total: passed 15, failed 0, skipped 0." in md and "Result: GREEN" in md
+    assert not (p1 / "SUMMARY.md").exists()
+
+
+def test_a_failure_in_any_folder_is_red_and_quarantine_applies_across_folders(tmp_path):
+    pool, p1 = _ordner(tmp_path, "pool"), _ordner(tmp_path, "ruhig-1")
+    _suite(pool, "hand", "node", 0, "# pass 3\n# fail 0\n# skipped 0\n")
+    _suite(p1, "ui-ruhig-1", "node", 1, "    not ok 1 - case b\nnot ok 1 - tests/a.test.mjs\n# pass 4\n# fail 1\n# skipped 0\n")
+    args = ["--ziel", str(pool), str(p1)]
+    assert ab.main(args + ["--quarantaene", _q(tmp_path)]) == 1
+    assert "### ui-ruhig-1" in (pool / "SUMMARY.md").read_text()
+    q = tmp_path / "q2.txt"
+    q.write_text("ui-seite tests/a.test.mjs  # known\n")
+    assert ab.main(args + ["--quarantaene", str(q)]) == 0
+    assert "Quarantined" in (pool / "SUMMARY.md").read_text()
+
+
+def test_skip_ceilings_count_over_all_folders(tmp_path):
+    pool, p1, p2 = (_ordner(tmp_path, n) for n in ("pool", "ruhig-1", "ruhig-2"))
+    _suite(pool, "ui-seite", "node", 0, "# pass 5\n# fail 0\n# skipped 2\n")
+    _suite(p1, "ui-ruhig-1", "node", 0, "# pass 5\n# fail 0\n# skipped 1\n")
+    _suite(p2, "ui-ruhig-2", "node", 0, "# pass 5\n# fail 0\n# skipped 1\n")
+    (tmp_path / "decke.txt").write_text("ui-seite 4\n")
+    args = ["--ziel", str(pool), str(p1), str(p2), "--quarantaene", _q(tmp_path), "--skips", str(tmp_path / "decke.txt")]
+    assert ab.main(args) == 0
+    (tmp_path / "decke.txt").write_text("ui-seite 3\n")   # each folder alone is under 3, together they are 4
+    assert ab.main(args) == 1
+    assert "ui-seite" in (pool / "SUMMARY.md").read_text().split("Failing tests")[1]
+
+
+def test_load_skips_and_flaky_reruns_of_a_package_count_in_the_merged_summary(tmp_path):
+    pool, p1 = _ordner(tmp_path, "pool"), _ordner(tmp_path, "ruhig-1")
+    _suite(pool, "hand", "node", 0, "# pass 3\n# fail 0\n# skipped 0\n")
+    _lauf(p1, "ui-ruhig-1", "node", _tap_fehler("/w/djk/ui/tests/a.test.mjs"), 1)
+    q = _q(tmp_path)
+    assert ab.main(["--ziel", str(p1), "--quarantaene", q, "--rerun-plan"]) == 0   # each package plans and reruns inside its own folder
+    _lauf(p1, "ui-ruhig-1", "node", "ok 1 - /w/djk/ui/tests/a.test.mjs\n# pass 4\n# fail 0\n# skipped 0\n", 0, "rerun")
+    assert ab.main(["--ziel", str(pool), str(p1), "--quarantaene", q]) == 0
+    md = (pool / "SUMMARY.md").read_text()
+    assert "### ui-ruhig-1" in md.split("## Flaky")[1] and "Result: GREEN" in md
+    assert (pool / "flaky.txt").read_text() == "ui-ruhig-1\tcase b\n"
+    _suite(p1, "shellsuite", "shell", 0, "SKIP load 9\nSHELL skip-last t.sh\nSHELL ok a.sh\n")
+    assert ab.main(["--ziel", str(pool), str(p1), "--quarantaene", q]) == 3   # skipped for load in a package: not green
+
+
+def test_a_folder_that_wrote_nothing_is_red_but_a_nothing_selected_summary_is_not(tmp_path):
+    pool, p1, p2 = (_ordner(tmp_path, n) for n in ("pool", "ruhig-1", "ruhig-2"))
+    _suite(pool, "hand", "node", 0, "# pass 3\n# fail 0\n# skipped 0\n")
+    (p2 / "SUMMARY.md").write_text("# Test run summary\n\nResult: GREEN, nothing selected\n")
+    args = ["--ziel", str(pool), str(p1), str(p2), "--quarantaene", _q(tmp_path)]
+    assert ab.main(args) == 1
+    assert "folder ruhig-1" in (pool / "SUMMARY.md").read_text()
+    _suite(p1, "ui-ruhig-1", "node", 0, "# pass 5\n# fail 0\n# skipped 0\n")
+    assert ab.main(args) == 0
+
+
+def test_a_suite_expected_but_missing_from_every_folder_is_red_and_the_rerun_plan_takes_one_folder(tmp_path):
+    pool, p1 = _ordner(tmp_path, "pool"), _ordner(tmp_path, "ruhig-1")
+    _suite(pool, "hand", "node", 0, "# pass 3\n# fail 0\n# skipped 0\n")
+    _suite(p1, "ui-ruhig-1", "node", 0, "# pass 5\n# fail 0\n# skipped 0\n")
+    args = ["--ziel", str(pool), str(p1), "--quarantaene", _q(tmp_path)]
+    assert ab.main(args + ["--erwartet", "hand ui-ruhig-1"]) == 0
+    assert ab.main(args + ["--erwartet", "hand ui-ruhig-1 core-ruhig"]) == 1
+    assert ab.main(args + ["--rerun-plan"]) == 2

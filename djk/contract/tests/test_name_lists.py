@@ -350,15 +350,23 @@ MUTATIONEN += [
 INS_INC = "djk/core/signalbox/src/insert_zeilen.inc"
 INS_TS = "djk/conductor/src/insert_controls.ts"
 INS_MJS = "djk/contract/mock_core/insert_controls.mjs"
+# The compressor parameter names come from the one source, so a new parameter changes docs/interfaces/insert_module.json and no line below.
+# The checked files spell them in the order of that json (the checker would flag a different order); a pattern tail is "|" + names + ")".
+KOMP = [q["name"] for a in __import__("json").loads((WURZEL / "docs" / "interfaces" / "insert_module.json").read_text(encoding="utf-8"))["arten"]
+        if a["art"] == "komp" for q in a["parameter"]]
+KOMP_AB_KNIE = "|".join(KOMP[KOMP.index("knie"):])          # |knie|attack|...: the tail of hand_bedienung.PFAD
+KOMP_AB_MAKEUP = "|".join(KOMP[KOMP.index("makeup"):])      # |makeup|mix|...: the tail of the schema pattern
+KOMP_OHNE = lambda ganz, name: "|".join(n for n in ganz.split("|") if n != name)   # noqa: E731
 MUTATIONEN += [
     (INS_TS, "  ['ins/komp/1/schp', 'linear', 0, 300, 0],\n", "", "Insert-Regler=Kern: R05 controls_info.ts fehlt: ins/komp/1/schp"),
-    (HAND_BED, "|knie|attack|release|makeup|mix|schp|sc)$", "|attack|release|makeup|mix|schp|sc)$", "Insert-Regler: R06 hand_bedienung.PFAD lehnt ins/komp/1/knie ab"),
-    (SCHEMA, "|makeup|mix|schp|sc)|ins/eq/", "|makeup|mix|sc)|ins/eq/", "Insert-Regler: R07 defs.schema.json regler_pfad lehnt ins/komp/1/schp ab"),
+    (HAND_BED, f"|{KOMP_AB_KNIE})$", f"|{KOMP_OHNE(KOMP_AB_KNIE, 'knie')})$", "Insert-Regler: R06 hand_bedienung.PFAD lehnt ins/komp/1/knie ab"),
+    (SCHEMA, f"|{KOMP_AB_MAKEUP})|ins/eq/", f"|{KOMP_OHNE(KOMP_AB_MAKEUP, 'schp')})|ins/eq/", "Insert-Regler: R07 defs.schema.json regler_pfad lehnt ins/komp/1/schp ab"),
     (INS_MJS, "  ['ins/komp/1/mix', 'lin', 0, 1, 1],\n", "", "Insert-Regler=Kern: R03 Attrappe REGLER fehlt: ins/komp/1/mix"),
     # too many: a 13th instance in a pattern or in a list, a sibling name
     (HAND_BED, "ins\\/komp\\/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)\\/", "ins\\/komp\\/([1-9]|[1-9][0-9]|1[0-5][0-9]|161)\\/", "Insert-Regler: R06 hand_bedienung.PFAD nimmt ins/komp/161/an an"),
     (SCHEMA, "ins/komp/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)/", "ins/komp/([1-9]|[1-9][0-9]|1[0-5][0-9]|161)/", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/komp/161/an an"),
-    (SCHEMA, "|makeup|mix|schp|sc)|ins/eq/", "|makeup|mix|schp|sc|zz)|ins/eq/", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/komp/1/zz an"),
+    (SCHEMA, f"|{KOMP_AB_MAKEUP})|ins/eq/", f"|{KOMP_AB_MAKEUP}|zz)|ins/eq/", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/komp/1/zz an"),
+    (SCHEMA, f"|{KOMP_AB_MAKEUP})|ins/eq/", f"|{KOMP_OHNE(KOMP_AB_MAKEUP, 'glue')})|ins/eq/", "Insert-Regler: R07 defs.schema.json regler_pfad lehnt ins/komp/1/glue ab"),   # strand 13 slice 1
     (INS_MJS, "  ['ins/komp/160/sc', 'stufe', 0, 128, 0],\n", "  ['ins/komp/160/sc', 'stufe', 0, 128, 0],\n  ['ins/komp/161/an', 'schalter', 0, 1, 0],\n",
      "Insert-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: ins/komp/161/an"),
     (INS_TS, "  ['ins/komp/160/an', 'schalter', 0, 1, 0],\n", "", "Insert-Regler=Kern: R05 controls_info.ts fehlt: ins/komp/160/an"),
@@ -378,7 +386,9 @@ MUTATIONEN += [
     (INS_MJS, "  ['ins/saett/1/drive', 'lin', 0, 36, 12],\n", "", "Insert-Regler=Kern: R03 Attrappe REGLER fehlt: ins/saett/1/drive"),
     (HAND_BED, "b[1-8]\\/(an|typ|freq|gain|q|steil|platz)", "b[1-7]\\/(an|typ|freq|gain|q|steil|platz)", "Insert-Regler: R06 hand_bedienung.PFAD lehnt ins/eq/1/b8/an ab"),
     (HAND_BED, "ins\\/eq\\/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)\\/", "ins\\/eq\\/([1-9]|[1-9][0-9]|1[0-5][0-9]|161)\\/", "Insert-Regler: R06 hand_bedienung.PFAD nimmt ins/eq/161/an an"),
-    (SCHEMA, "ins/saett/([1-9]|[12][0-9]|3[0-2])/(an|drive|out|mix|kurve|decke)", "ins/saett/([1-9]|[12][0-9]|3[0-2])/(an|drive|out|mix|kurve|decke|zz)", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/saett/1/zz an"),
+    (SCHEMA, "ins/saett/([1-9]|[12][0-9]|3[0-2])/(an|drive|out|mix|kurve|decke|knie)", "ins/saett/([1-9]|[12][0-9]|3[0-2])/(an|drive|out|mix|kurve|decke|knie|zz)", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/saett/1/zz an"),
+    (SCHEMA, "ins/saett/([1-9]|[12][0-9]|3[0-2])/(an|drive|out|mix|kurve|decke|knie)", "ins/saett/([1-9]|[12][0-9]|3[0-2])/(an|drive|out|mix|kurve|decke)", "Insert-Regler: R07 defs.schema.json regler_pfad lehnt ins/saett/1/knie ab"),   # strand 13 slice 2
+    (HAND_BED, "ins\\/saett\\/([1-9]|[12][0-9]|3[0-2])\\/(an|drive|out|mix|kurve|decke|knie)$", "ins\\/saett\\/([1-9]|[12][0-9]|3[0-2])\\/(an|drive|out|mix|kurve|decke)$", "Insert-Regler: R06 hand_bedienung.PFAD lehnt ins/saett/1/knie ab"),   # strand 13 slice 2
     (SCHEMA, "ins/eq/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)/(an|out|propq|b[1-8]/", "ins/eq/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)/(an|out|propq|b[0-8]/", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/eq/1/b0/an an"),
     (SPEC, "| `ins/eq/<n>/b<m>/gain` |", "| `ins/eq/<n>/b<m>/gaen` |", "Insert-Regler=Kern: R02 INTERFACES §1.5 fehlt: ins/eq/1/b1/gain"),
     (SPEC, "| `ins/eq/<n>/b1/freq` | Hz | 10 to 22000 | 30 |", "| `ins/eq/<n>/b1/freq` | Hz | 10 to 22000 | 31 |",

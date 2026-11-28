@@ -1125,7 +1125,11 @@ class TestJ5:
 
     def test_code_count_is_the_count_of_the_tool_lines_in_hand_ts(self):
         from tour import j5
-        zeilen = open(os.path.join(L.DJK, "hand", "hand.ts"), encoding="utf-8").read().split("\n")
+        ordner = os.path.join(L.DJK, "hand")
+        zeilen = []
+        for n in sorted(os.listdir(ordner)):   # hand.ts and the modules split off it carry the tool entries
+            if n.endswith(".ts") and (n == "hand.ts" or "Moved unchanged out of hand.ts" in open(os.path.join(ordner, n), encoding="utf-8").read(600)):
+                zeilen += open(os.path.join(ordner, n), encoding="utf-8").read().split("\n")
         assert j5.code_zahl() == len([z for z in zeilen if z.startswith("  { name: '")]) > 50
 
     def test_registration_line_is_in_the_manual(self):
